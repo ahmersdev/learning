@@ -1,6 +1,7 @@
 import "dotenv/config";
 
 import express, {
+  Router,
   type Express,
   type Request,
   type Response,
@@ -11,14 +12,18 @@ import helmet from "helmet";
 import cors from "cors";
 
 import authRouter from "./routes/auth.routes.ts";
+import userRouter from "./routes/user.routes.ts";
 import { errorHandler } from "./middlewares/error-handler.middleware.ts";
 import { requestLogger } from "./middlewares/logger.middleware.ts";
 import { generalLimiter } from "./middlewares/rate-limiter.middleware.ts";
 import { NotFoundError } from "./utils/app-errors.ts";
+import swaggerUi from "swagger-ui-express";
+import swaggerSpec from "./config/swagger.ts";
 
 const allowedOrigins = [
   "http://localhost:3000", // your React/Next frontend dev URL
   "http://localhost:5173", // if using Vite
+  "http://localhost:4000", // For Swagger UI
 ];
 
 const app: Express = express();
@@ -57,8 +62,17 @@ app.get("/", (_req: Request, res: Response) => {
   res.send("Hello World!");
 });
 
-// 6. Application Domain Routes
-app.use("/api/v1/auth", authRouter);
+// 6. Application Domain Routes — all mounted under one versioned API prefix
+const apiRouter = Router();
+apiRouter.use("/auth", authRouter);
+apiRouter.use("/user", userRouter);
+
+app.use("/api/v1", apiRouter);
+
+// API Docs — dev/staging only, never exposed in production
+if (process.env.NODE_ENV !== "production") {
+  app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+}
 
 // 7. Catch-All 404 Handler for Unhandled Routes (Express v5 Native Throw)
 app.use((req: Request, _res: Response, _next: NextFunction) => {
