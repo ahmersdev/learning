@@ -11,7 +11,6 @@ import {
   authLimiter,
   refreshLimiter,
 } from "../middlewares/rate-limiter.middleware.ts";
-import { requireAuth } from "../middlewares/auth.middleware.ts";
 
 const router = Router();
 
@@ -21,6 +20,6 @@ router.post("/signin", authLimiter, validate(signinSchema), signin);
 
 router.post("/refresh", refreshLimiter, refresh);
 
-router.post("/signout", requireAuth, signout);
+router.post("/signout", signout);
 
 export default router;

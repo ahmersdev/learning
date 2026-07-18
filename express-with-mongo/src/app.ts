@@ -22,7 +22,6 @@ const allowedOrigins = [
 ];
 
 const app: Express = express();
-const port = process.env.PORT || 4000;
 
 // Trust the first proxy hop (needed for correct req.ip / rate-limiting behind
 // a reverse proxy or hosting platform like Heroku/Render/Nginx in prod)
@@ -69,6 +68,4 @@ app.use((req: Request, _res: Response, _next: NextFunction) => {
 // 8. Global Error Handler (MUST BE THE FINAL MIDDLEWARE)
 app.use(errorHandler);
 
-app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`);
-});
+export default app;
