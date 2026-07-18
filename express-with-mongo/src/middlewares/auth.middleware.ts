@@ -1,5 +1,6 @@
 import { type Request, type Response, type NextFunction } from "express";
 import { AppError } from "../utils/app-errors.ts";
+import { verifyAccessToken } from "../utils/jwt.ts";
 
 // Extend Express Request type locally to include the user object
 declare global {
@@ -13,7 +14,7 @@ declare global {
   }
 }
 
-export const requireAuth = async (
+export const requireAuth = (
   req: Request,
   _res: Response,
   next: NextFunction,
@@ -25,15 +26,17 @@ export const requireAuth = async (
       throw new AppError("Authentication required", 401);
     }
 
-    const _token = authHeader.split(" ")[1];
+    const token = authHeader.split(" ")[1];
 
-    // TODO: Verify JWT and fetch user from DB
-    // const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    if (!token) {
+      throw new AppError("Authentication required", 401);
+    }
 
-    // Stubbing a mock authorized user payload
+    const decoded = verifyAccessToken(token);
+
     req.user = {
-      id: "mock-user-id-123",
-      email: "mock-user@example.com",
+      id: decoded.userId,
+      email: decoded.email,
     };
 
     next();

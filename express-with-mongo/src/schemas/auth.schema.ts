@@ -6,10 +6,12 @@ export const signupSchema = z
     username: z
       .string()
       .trim()
+      .toLowerCase()
       .min(3, "username must be at least 3 characters"),
     email: z
       .string()
       .trim()
+      .toLowerCase()
       .pipe(z.email({ error: "Invalid email format" })),
     password: z
       .string()
@@ -26,10 +28,11 @@ export const signupSchema = z
 
 export const signinSchema = z
   .object({
-    username: z.string().trim().optional(),
+    username: z.string().trim().toLowerCase().optional(),
     email: z
       .string()
       .trim()
+      .toLowerCase()
       .pipe(z.email({ error: "Invalid email format" }))
       .optional(),
     password: z.string().min(1, "Password is required"),

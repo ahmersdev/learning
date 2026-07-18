@@ -1,4 +1,3 @@
-// src/services/auth.service.ts
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import type {

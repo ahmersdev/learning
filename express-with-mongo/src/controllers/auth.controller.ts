@@ -7,6 +7,12 @@ import type {
 import { AppError } from "../utils/app-errors.ts";
 import { generateAccessToken, verifyRefreshToken } from "../utils/jwt.ts";
 
+const REFRESH_COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production", // only over HTTPS in prod
+  sameSite: "strict" as const,
+};
+
 export const signup = async (
   req: Request<{}, {}, SignupInputSchema>,
   res: Response,
@@ -18,9 +24,7 @@ export const signup = async (
     );
 
     res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production", // only over HTTPS in prod
-      sameSite: "strict",
+      ...REFRESH_COOKIE_OPTIONS,
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days, matches JWT_REFRESH_EXPIRY
     });
 
@@ -40,12 +44,17 @@ export const signin = async (
   next: NextFunction,
 ) => {
   try {
-    const userData = await signinService(req.body);
+    const { user, accessToken, refreshToken } = await signinService(req.body);
+
+    res.cookie("refreshToken", refreshToken, {
+      ...REFRESH_COOKIE_OPTIONS,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
 
     return res.status(200).json({
       status: "success",
       message: "Login successful",
-      data: userData,
+      data: { user, accessToken },
     });
   } catch (error) {
     next(error);
@@ -86,7 +95,7 @@ export const signout = async (
   next: NextFunction,
 ) => {
   try {
-    res.clearCookie("refreshToken");
+    res.clearCookie("refreshToken", REFRESH_COOKIE_OPTIONS);
     return res
       .status(200)
       .json({ status: "success", message: "Logged out successfully" });

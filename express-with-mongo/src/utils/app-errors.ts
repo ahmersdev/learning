@@ -21,3 +21,21 @@ export class NotFoundError extends AppError {
     super(message, 404);
   }
 }
+
+export class UnauthorizedError extends AppError {
+  constructor(message = "Unauthorized") {
+    super(message, 401);
+  }
+}
+
+export class ConflictError extends AppError {
+  constructor(message = "Resource already exists") {
+    super(message, 409);
+  }
+}
+
+export class BadRequestError extends AppError {
+  constructor(message = "Bad request", details?: unknown) {
+    super(message, 400, details);
+  }
+}

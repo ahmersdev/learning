@@ -19,6 +19,20 @@ export const authLimiter = rateLimit({
   legacyHeaders: false,
   message: {
     status: "error",
-    message: "Too many login attempts, please try again later",
+    message: "Too many auth attempts, please try again later",
+  },
+});
+
+// Looser limiter for token refresh — legitimate clients call this often
+// (multiple tabs/devices, token expiry every 15m), so it shouldn't share
+// the strict brute-force limit meant for password guessing
+export const refreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    status: "error",
+    message: "Too many refresh attempts, please try again later",
   },
 });

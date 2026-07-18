@@ -24,6 +24,10 @@ const allowedOrigins = [
 const app: Express = express();
 const port = process.env.PORT || 4000;
 
+// Trust the first proxy hop (needed for correct req.ip / rate-limiting behind
+// a reverse proxy or hosting platform like Heroku/Render/Nginx in prod)
+app.set("trust proxy", 1);
+
 // 1. Security headers — first, always
 app.use(helmet());
 
@@ -42,7 +46,7 @@ app.use(
 );
 
 // 3. Body parsing
-app.use(express.json());
+app.use(express.json({ limit: "10kb" })); // cap payload size to prevent abuse
 app.use(cookieParser());
 
 // 4. Logging + rate limiting
