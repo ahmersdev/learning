@@ -1,0 +1,34 @@
+{
+  "name": "express-with-mongo",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "tsx --watch src/app.ts",
+    "start": "tsx src/app.ts",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "11.13.0",
+      "onFail": "download"
+    }
+  },
+  "type": "module",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.1.1",
+    "nodemon": "^3.1.14",
+    "tsx": "^4.23.1",
+    "typescript": "^7.0.2"
+  }
+}
