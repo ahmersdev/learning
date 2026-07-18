@@ -1,9 +1,12 @@
 import bcrypt from "bcrypt";
-import type { ISigninBody, ISignupBody } from "../types/auth.types.ts";
+import type {
+  SigninInputSchema,
+  SignupInputSchema,
+} from "../schemas/auth.schema.ts";
 
 const SALT_ROUNDS = 10;
 
-export const createUserService = async (userData: ISignupBody) => {
+export const createUserService = async (userData: SignupInputSchema) => {
   const { fullName, username, email, password } = userData;
 
   const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
@@ -19,7 +22,7 @@ export const createUserService = async (userData: ISignupBody) => {
   };
 };
 
-export const signinService = async (credentials: ISigninBody) => {
+export const signinService = async (credentials: SigninInputSchema) => {
   const { username, email, password } = credentials;
 
   // TODO: DB lookup and bcrypt.compare validation here

@@ -2,9 +2,18 @@ import { type Request, type Response, type NextFunction } from "express";
 
 export const requestLogger = (
   req: Request,
-  _res: Response,
+  res: Response,
   next: NextFunction,
 ) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+  const start = performance.now();
+
+  res.on("finish", () => {
+    const duration = (performance.now() - start).toFixed(2);
+    const timestamp = new Date().toISOString();
+    console.log(
+      `[${timestamp}] ${req.method} ${req.originalUrl} ${res.statusCode} - ${duration}ms`,
+    );
+  });
+
   next();
 };

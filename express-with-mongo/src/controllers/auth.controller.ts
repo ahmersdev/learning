@@ -1,4 +1,4 @@
-import { type Request, type Response } from "express";
+import { type Request, type Response, type NextFunction } from "express";
 import { createUserService, signinService } from "../services/auth.service.ts";
 import type {
   SigninInputSchema,
@@ -8,31 +8,51 @@ import type {
 export const signup = async (
   req: Request<{}, {}, SignupInputSchema>,
   res: Response,
+  next: NextFunction,
 ) => {
-  const newUser = await createUserService(req.body);
+  try {
+    const newUser = await createUserService(req.body);
 
-  res.status(201).json({
-    message: "User registered successfully",
-    data: newUser,
-  });
+    return res.status(201).json({
+      status: "success",
+      message: "User registered successfully",
+      data: newUser,
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
 export const signin = async (
   req: Request<{}, {}, SigninInputSchema>,
   res: Response,
+  next: NextFunction,
 ) => {
-  const userData = await signinService(req.body);
+  try {
+    const userData = await signinService(req.body);
 
-  res.status(200).json({
-    message: "Login successful",
-    user: userData,
-  });
+    return res.status(200).json({
+      status: "success",
+      message: "Login successful",
+      data: userData,
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
-export const signout = async (_req: Request, res: Response) => {
-  // TODO: Clear HTTP-only JWT cookies here if you are using them
-
-  res.status(200).json({
-    message: "Logged out successfully",
-  });
+export const signout = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    // TODO: Clear HTTP-only JWT cookies here if you are using them
+    return res.status(200).json({
+      status: "success",
+      message: "Logged out successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
 };
