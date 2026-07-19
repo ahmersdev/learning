@@ -1,15 +1,30 @@
-// TODO: once DB is wired up, replace with real user lookups/updates
-
 import type { UserUpdateInput } from "../schemas/user.schema.ts";
+import { User } from "../models/user.model.ts";
+import { AppError, ConflictError } from "../utils/app-errors.ts";
+
+const isDuplicateKeyError = (
+  error: unknown,
+): error is { code: number; keyPattern?: Record<string, unknown> } => {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code: unknown }).code === 11000
+  );
+};
 
 export const getUserService = async (userId: string) => {
-  // TODO: find user by id in DB -> if not found, throw new AppError("User not found", 404)
+  const user = await User.findById(userId);
+
+  if (!user) {
+    throw new AppError("User not found", 404);
+  }
 
   return {
-    id: userId,
-    fullName: "Stub User",
-    username: "stubuser",
-    email: "stub@example.com",
+    id: user.id,
+    fullName: user.fullName,
+    username: user.username,
+    email: user.email,
   };
 };
 
@@ -17,12 +32,28 @@ export const updateUserService = async (
   userId: string,
   updates: UserUpdateInput,
 ) => {
-  // TODO: find user by id, apply updates, save to DB
-  // if user not found -> throw new AppError("User not found", 404)
+  let user;
+  try {
+    user = await User.findByIdAndUpdate(
+      userId,
+      { $set: updates },
+      { new: true, runValidators: true },
+    );
+  } catch (error) {
+    if (isDuplicateKeyError(error)) {
+      throw new ConflictError("Username already taken");
+    }
+    throw error;
+  }
+
+  if (!user) {
+    throw new AppError("User not found", 404);
+  }
 
   return {
-    id: userId,
-    fullName: updates.fullName ?? "Stub User",
-    username: updates.username ?? "stubuser",
+    id: user.id,
+    fullName: user.fullName,
+    username: user.username,
+    email: user.email,
   };
 };

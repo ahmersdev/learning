@@ -69,7 +69,7 @@ app.get("/", (_req: Request, res: Response) => {
 // 6. Application Domain Routes — all mounted under one versioned API prefix
 const apiRouter = Router();
 apiRouter.use("/auth", authRouter);
-apiRouter.use("/user", userRouter);
+apiRouter.use("/users", userRouter);
 apiRouter.use("/workspaces", workspacesRouter);
 apiRouter.use("/workspaces", workspaceMembersRouter);
 apiRouter.use("/workspaces", projectsRouter);
