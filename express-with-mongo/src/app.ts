@@ -25,11 +25,10 @@ import { NotFoundError } from "./utils/app-errors.ts";
 import swaggerUi from "swagger-ui-express";
 import swaggerSpec from "./config/swagger.ts";
 
-const allowedOrigins = [
-  "http://localhost:3000", // your React/Next frontend dev URL
-  "http://localhost:5173", // if using Vite
-  "http://localhost:4000", // For Swagger UI
-];
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 const app: Express = express();
 

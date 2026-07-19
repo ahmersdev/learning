@@ -1,10 +1,13 @@
 import rateLimit from "express-rate-limit";
 
+const skipInTest = () => process.env.NODE_ENV === "test";
+
 export const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   limit: 100, // 100 requests per IP per window
   standardHeaders: true, // adds RateLimit-* headers so clients can see their limit status
   legacyHeaders: false,
+  skip: skipInTest,
   message: {
     status: "error",
     message: "Too many requests, please try again later",
@@ -17,6 +20,7 @@ export const authLimiter = rateLimit({
   limit: 5, // only 5 attempts per 15 min — this is what actually stops password-guessing attacks
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipInTest,
   message: {
     status: "error",
     message: "Too many auth attempts, please try again later",
@@ -31,6 +35,7 @@ export const refreshLimiter = rateLimit({
   limit: 30,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: skipInTest,
   message: {
     status: "error",
     message: "Too many refresh attempts, please try again later",

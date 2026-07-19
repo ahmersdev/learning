@@ -17,11 +17,9 @@ export const workspaceMembersPostSchema = z
 
 export const workspaceMembersPatchSchema = z
   .object({
-    role: z
-      .enum(workspaceRoles, {
-        error: `role must be one of: ${workspaceRoles.join(", ")}`,
-      })
-      .optional(),
+    role: z.enum(workspaceRoles, {
+      error: `role must be one of: ${workspaceRoles.join(", ")}`,
+    }),
   })
   .strict();
 
