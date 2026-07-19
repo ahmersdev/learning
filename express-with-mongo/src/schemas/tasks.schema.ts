@@ -56,6 +56,7 @@ export const taskPatchSchema = z
   });
 
 const taskSortFields = ["dueDate", "priority", "createdAt", "title"] as const;
+const sortOrders = ["asc", "desc"] as const;
 
 export const taskQuerySchema = z
   .object({
@@ -63,6 +64,7 @@ export const taskQuerySchema = z
     priority: z.enum(taskPriorities).optional(),
     assigneeId: z.string().trim().min(1).optional(),
     sortBy: z.enum(taskSortFields).optional(),
+    sortOrder: z.enum(sortOrders).default("asc"),
     page: z.coerce.number().int().min(1).default(1),
     limit: z.coerce.number().int().min(1).max(100).default(20),
   })

@@ -88,6 +88,9 @@ router.post(
  *         name: sortBy
  *         schema: { type: string, enum: [dueDate, priority, createdAt, title] }
  *       - in: query
+ *         name: sortOrder
+ *         schema: { type: string, enum: [asc, desc], default: asc }
+ *       - in: query
  *         name: page
  *         schema: { type: integer, default: 1 }
  *       - in: query
