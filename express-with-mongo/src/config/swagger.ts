@@ -17,6 +17,7 @@ const swaggerSpec = swaggerJSDoc({
         name: "Workspace Members",
         description: "Workspace membership management",
       },
+      { name: "Projects", description: "Project management endpoints" },
     ],
     components: {
       securitySchemes: {
