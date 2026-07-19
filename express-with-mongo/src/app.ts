@@ -17,6 +17,7 @@ import workspacesRouter from "./routes/workspaces.routes.ts";
 import workspaceMembersRouter from "./routes/workspace-members.routes.ts";
 import projectsRouter from "./routes/projects.routes.ts";
 import tasksRouter from "./routes/tasks.routes.ts";
+import commentsRouter from "./routes/comments.routes.ts";
 import { errorHandler } from "./middlewares/error-handler.middleware.ts";
 import { requestLogger } from "./middlewares/logger.middleware.ts";
 import { generalLimiter } from "./middlewares/rate-limiter.middleware.ts";
@@ -74,6 +75,7 @@ apiRouter.use("/workspaces", workspacesRouter);
 apiRouter.use("/workspaces", workspaceMembersRouter);
 apiRouter.use("/workspaces", projectsRouter);
 apiRouter.use("/projects", tasksRouter);
+apiRouter.use("/tasks", commentsRouter);
 
 app.use("/api/v1", apiRouter);
 
