@@ -11,6 +11,7 @@ const config: Config = {
     "^.+\\.ts$": ["ts-jest", { useESM: true }],
   },
   setupFiles: ["<rootDir>/src/tests/setup.ts"],
+  setupFilesAfterEnv: ["<rootDir>/src/tests/db-setup.ts"],
 };
 
 export default config;

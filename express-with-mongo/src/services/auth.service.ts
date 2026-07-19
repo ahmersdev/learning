@@ -1,59 +1,179 @@
 import bcrypt from "bcrypt";
-import crypto from "crypto";
 import type {
   SignupInputSchema,
   SigninInputSchema,
 } from "../schemas/auth.schema.ts";
-import { generateAccessToken, generateRefreshToken } from "../utils/jwt.ts";
+import {
+  generateAccessToken,
+  generateRefreshToken,
+  REFRESH_EXPIRY_MS,
+} from "../utils/jwt.ts";
+import { User } from "../models/user.model.ts";
+import { Session } from "../models/session.model.ts";
+import { AppError, ConflictError } from "../utils/app-errors.ts";
 
 const SALT_ROUNDS = 10;
 
-export const createUserService = async (userData: SignupInputSchema) => {
+const isDuplicateKeyError = (
+  error: unknown,
+): error is { code: number; keyPattern?: Record<string, unknown> } => {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code: unknown }).code === 11000
+  );
+};
+
+// Creates a Session document and issues a matching access + refresh token
+// pair. The refresh token embeds the session's _id so it can be looked up
+// (and revoked) later without touching the User document at all.
+const issueTokens = async (
+  userId: string,
+  email: string,
+  fullName: string,
+  username: string,
+  userAgent?: string,
+) => {
+  const session = await Session.create({
+    userId,
+    userAgent,
+    expiresAt: new Date(Date.now() + REFRESH_EXPIRY_MS),
+  });
+
+  const accessToken = generateAccessToken({
+    userId,
+    email,
+    fullName,
+    username,
+  });
+  const refreshToken = generateRefreshToken({
+    userId,
+    email,
+    sessionId: session.id,
+  });
+
+  return { accessToken, refreshToken };
+};
+
+export const createUserService = async (
+  userData: SignupInputSchema,
+  userAgent?: string,
+) => {
   const { fullName, username, email, password } = userData;
+
+  const existingUser = await User.findOne({ $or: [{ email }, { username }] });
+
+  if (existingUser) {
+    throw new ConflictError(
+      existingUser.email === email
+        ? "Email already in use"
+        : "Username already taken",
+    );
+  }
 
   const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
-  // TODO: once DB is wired up:
-  // 1. check if email/username already exists -> throw AppError("User already exists", 409)
-  // 2. save { fullName, username, email, hashedPassword } to DB
-  // 3. use the real DB-generated user._id below instead of this fake one
+  let user;
+  try {
+    user = await User.create({
+      fullName,
+      username,
+      email,
+      password: hashedPassword,
+    });
+  } catch (error) {
+    if (isDuplicateKeyError(error)) {
+      const field = error.keyPattern && Object.keys(error.keyPattern)[0];
+      throw new ConflictError(
+        field === "email" ? "Email already in use" : "Username already taken",
+      );
+    }
+    throw error;
+  }
 
-  const fakeUserId = crypto.randomUUID();
-
-  const accessToken = generateAccessToken({ userId: fakeUserId, email });
-  const refreshToken = generateRefreshToken({ userId: fakeUserId, email });
+  const { accessToken, refreshToken } = await issueTokens(
+    user.id,
+    user.email,
+    user.fullName,
+    user.username,
+    userAgent,
+  );
 
   return {
-    user: { fullName, username, email },
+    user: {
+      fullName: user.fullName,
+      username: user.username,
+      email: user.email,
+    },
     accessToken,
     refreshToken,
   };
 };
 
-export const signinService = async (credentials: SigninInputSchema) => {
+export const signinService = async (
+  credentials: SigninInputSchema,
+  userAgent?: string,
+) => {
   const { username, email, password } = credentials;
 
-  // TODO: once DB is wired up:
-  // 1. find user by email or username
-  // 2. if not found -> throw new AppError("Invalid credentials", 401)
-  // 3. const isMatch = await bcrypt.compare(password, user.hashedPassword)
-  // 4. if (!isMatch) -> throw new AppError("Invalid credentials", 401)
+  const user = await User.findOne({ $or: [{ email }, { username }] }).select(
+    "+password",
+  );
 
-  const fakeUserId = crypto.randomUUID();
-  const resolvedEmail = email || "stub@example.com";
+  if (!user) {
+    throw new AppError("Invalid credentials", 401);
+  }
 
-  const accessToken = generateAccessToken({
-    userId: fakeUserId,
-    email: resolvedEmail,
-  });
-  const refreshToken = generateRefreshToken({
-    userId: fakeUserId,
-    email: resolvedEmail,
-  });
+  const isMatch = await bcrypt.compare(password, user.password);
+
+  if (!isMatch) {
+    throw new AppError("Invalid credentials", 401);
+  }
+
+  const { accessToken, refreshToken } = await issueTokens(
+    user.id,
+    user.email,
+    user.fullName,
+    user.username,
+    userAgent,
+  );
 
   return {
-    user: { username, email: resolvedEmail },
+    user: { username: user.username, email: user.email },
     accessToken,
     refreshToken,
   };
+};
+
+export const refreshSessionService = async (
+  sessionId: string,
+  userId: string,
+  email: string,
+) => {
+  const session = await Session.findById(sessionId).catch(() => null);
+
+  if (!session) {
+    throw new AppError("Session expired or revoked, please sign in again", 401);
+  }
+
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new AppError("User no longer exists", 401);
+  }
+
+  await session.deleteOne();
+
+  return issueTokens(
+    userId,
+    email,
+    user.fullName,
+    user.username,
+    session.userAgent,
+  );
+};
+
+export const signoutService = async (sessionId: string | undefined) => {
+  if (!sessionId) return;
+  await Session.findByIdAndDelete(sessionId);
 };
