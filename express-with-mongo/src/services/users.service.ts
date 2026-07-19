@@ -1,4 +1,4 @@
-import type { UserUpdateInput } from "../schemas/user.schema.ts";
+import type { UserUpdateInput } from "../schemas/users.schema.ts";
 import { User } from "../models/user.model.ts";
 import { AppError, ConflictError } from "../utils/app-errors.ts";
 

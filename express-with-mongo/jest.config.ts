@@ -12,6 +12,7 @@ const config: Config = {
   },
   setupFiles: ["<rootDir>/src/tests/setup.ts"],
   setupFilesAfterEnv: ["<rootDir>/src/tests/db-setup.ts"],
+  maxWorkers: 1,
 };
 
 export default config;

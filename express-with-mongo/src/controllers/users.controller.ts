@@ -1,7 +1,10 @@
 import { type Request, type Response, type NextFunction } from "express";
-import type { UserUpdateInput } from "../schemas/user.schema.ts";
+import type { UserUpdateInput } from "../schemas/users.schema.ts";
 import { AppError } from "../utils/app-errors.ts";
-import { getUserService, updateUserService } from "../services/user.service.ts";
+import {
+  getUserService,
+  updateUserService,
+} from "../services/users.service.ts";
 
 export const getUser = async (
   req: Request,
