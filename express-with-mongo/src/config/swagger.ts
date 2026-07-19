@@ -12,6 +12,7 @@ const swaggerSpec = swaggerJSDoc({
     tags: [
       { name: "Auth", description: "Authentication endpoints" },
       { name: "Users", description: "User profile endpoints" },
+      { name: "Workspaces", description: "Workspace management endpoints" },
     ],
     components: {
       securitySchemes: {

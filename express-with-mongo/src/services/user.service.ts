@@ -1,6 +1,6 @@
 // TODO: once DB is wired up, replace with real user lookups/updates
 
-import type { UserUpdateSchema } from "../schemas/user.schema.ts";
+import type { UserUpdateInput } from "../schemas/user.schema.ts";
 
 export const getUserService = async (userId: string) => {
   // TODO: find user by id in DB -> if not found, throw new AppError("User not found", 404)
@@ -15,7 +15,7 @@ export const getUserService = async (userId: string) => {
 
 export const updateUserService = async (
   userId: string,
-  updates: UserUpdateSchema,
+  updates: UserUpdateInput,
 ) => {
   // TODO: find user by id, apply updates, save to DB
   // if user not found -> throw new AppError("User not found", 404)

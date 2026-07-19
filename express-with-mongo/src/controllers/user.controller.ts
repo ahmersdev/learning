@@ -1,5 +1,5 @@
 import { type Request, type Response, type NextFunction } from "express";
-import type { UserUpdateSchema } from "../schemas/user.schema.ts";
+import type { UserUpdateInput } from "../schemas/user.schema.ts";
 import { AppError } from "../utils/app-errors.ts";
 import { getUserService, updateUserService } from "../services/user.service.ts";
 
@@ -25,7 +25,7 @@ export const getUser = async (
 };
 
 export const patchUser = async (
-  req: Request<{}, {}, UserUpdateSchema>,
+  req: Request<{}, {}, UserUpdateInput>,
   res: Response,
   next: NextFunction,
 ) => {

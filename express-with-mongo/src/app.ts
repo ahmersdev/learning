@@ -13,6 +13,7 @@ import cors from "cors";
 
 import authRouter from "./routes/auth.routes.ts";
 import userRouter from "./routes/user.routes.ts";
+import workspacesRouter from "./routes/workspaces.routes.ts";
 import { errorHandler } from "./middlewares/error-handler.middleware.ts";
 import { requestLogger } from "./middlewares/logger.middleware.ts";
 import { generalLimiter } from "./middlewares/rate-limiter.middleware.ts";
@@ -66,6 +67,7 @@ app.get("/", (_req: Request, res: Response) => {
 const apiRouter = Router();
 apiRouter.use("/auth", authRouter);
 apiRouter.use("/user", userRouter);
+apiRouter.use("/workspaces", workspacesRouter);
 
 app.use("/api/v1", apiRouter);
 
