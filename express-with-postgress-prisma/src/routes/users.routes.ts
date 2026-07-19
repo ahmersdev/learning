@@ -2,8 +2,8 @@ import { Router } from "express";
 import { requireAuth } from "../middlewares/auth.middleware.ts";
 import { validate } from "../middlewares/validate.middleware.ts";
 import { generalLimiter } from "../middlewares/rate-limiter.middleware.ts";
-import { userSchema } from "../schemas/user.schema.ts";
-import { getUser, patchUser } from "../controllers/user.controller.ts";
+import { userSchema } from "../schemas/users.schema.ts";
+import { getUser, patchUser } from "../controllers/users.controller.ts";
 
 const router = Router();
 

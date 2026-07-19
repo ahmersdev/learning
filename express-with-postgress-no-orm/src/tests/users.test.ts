@@ -10,15 +10,15 @@ const validAccessToken = jwt.sign(
 );
 
 describe("User routes", () => {
-  describe("GET /api/v1/user/me", () => {
+  describe("GET /api/v1/users/me", () => {
     it("returns 401 with no access token", async () => {
-      const res = await request(app).get("/api/v1/user/me");
+      const res = await request(app).get("/api/v1/users/me");
       expect(res.status).toBe(401);
     });
 
     it("returns 401 with an invalid access token", async () => {
       const res = await request(app)
-        .get("/api/v1/user/me")
+        .get("/api/v1/users/me")
         .set("Authorization", "Bearer not-a-real-token");
 
       expect(res.status).toBe(401);
@@ -32,7 +32,7 @@ describe("User routes", () => {
       );
 
       const res = await request(app)
-        .get("/api/v1/user/me")
+        .get("/api/v1/users/me")
         .set("Authorization", `Bearer ${expiredToken}`);
 
       expect(res.status).toBe(401);
@@ -40,7 +40,7 @@ describe("User routes", () => {
 
     it("returns the user profile with a valid access token", async () => {
       const res = await request(app)
-        .get("/api/v1/user/me")
+        .get("/api/v1/users/me")
         .set("Authorization", `Bearer ${validAccessToken}`);
 
       expect(res.status).toBe(200);
@@ -49,10 +49,10 @@ describe("User routes", () => {
     });
   });
 
-  describe("PATCH /api/v1/user/me", () => {
+  describe("PATCH /api/v1/users/me", () => {
     it("returns 401 with no access token", async () => {
       const res = await request(app)
-        .patch("/api/v1/user/me")
+        .patch("/api/v1/users/me")
         .send({ fullName: "New Name" });
 
       expect(res.status).toBe(401);
@@ -60,7 +60,7 @@ describe("User routes", () => {
 
     it("returns 400 when body is empty", async () => {
       const res = await request(app)
-        .patch("/api/v1/user/me")
+        .patch("/api/v1/users/me")
         .set("Authorization", `Bearer ${validAccessToken}`)
         .send({});
 
@@ -69,7 +69,7 @@ describe("User routes", () => {
 
     it("returns 400 when an unknown field is sent", async () => {
       const res = await request(app)
-        .patch("/api/v1/user/me")
+        .patch("/api/v1/users/me")
         .set("Authorization", `Bearer ${validAccessToken}`)
         .send({ email: "new@example.com" }); // not allowed by userSchema (.strict())
 
@@ -78,7 +78,7 @@ describe("User routes", () => {
 
     it("updates fullName only", async () => {
       const res = await request(app)
-        .patch("/api/v1/user/me")
+        .patch("/api/v1/users/me")
         .set("Authorization", `Bearer ${validAccessToken}`)
         .send({ fullName: "Updated Name" });
 
@@ -88,7 +88,7 @@ describe("User routes", () => {
 
     it("updates username only", async () => {
       const res = await request(app)
-        .patch("/api/v1/user/me")
+        .patch("/api/v1/users/me")
         .set("Authorization", `Bearer ${validAccessToken}`)
         .send({ username: "newusername" });
 
@@ -98,7 +98,7 @@ describe("User routes", () => {
 
     it("rejects a username shorter than 3 characters", async () => {
       const res = await request(app)
-        .patch("/api/v1/user/me")
+        .patch("/api/v1/users/me")
         .set("Authorization", `Bearer ${validAccessToken}`)
         .send({ username: "ab" });
 

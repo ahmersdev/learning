@@ -12,7 +12,7 @@ import helmet from "helmet";
 import cors from "cors";
 
 import authRouter from "./routes/auth.routes.ts";
-import userRouter from "./routes/user.routes.ts";
+import userRouter from "./routes/users.routes.ts";
 import workspacesRouter from "./routes/workspaces.routes.ts";
 import workspaceMembersRouter from "./routes/workspace-members.routes.ts";
 import projectsRouter from "./routes/projects.routes.ts";
@@ -69,7 +69,7 @@ app.get("/", (_req: Request, res: Response) => {
 // 6. Application Domain Routes — all mounted under one versioned API prefix
 const apiRouter = Router();
 apiRouter.use("/auth", authRouter);
-apiRouter.use("/user", userRouter);
+apiRouter.use("/users", userRouter);
 apiRouter.use("/workspaces", workspacesRouter);
 apiRouter.use("/workspaces", workspaceMembersRouter);
 apiRouter.use("/workspaces", projectsRouter);
