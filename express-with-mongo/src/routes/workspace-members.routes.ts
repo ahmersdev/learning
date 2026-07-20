@@ -7,6 +7,7 @@ import {
   getWorkspaceMembers,
   patchWorkspaceMembersById,
   deleteWorkspaceMembersById,
+  resetMemberPassword,
 } from "../controllers/workspace-members.controller.ts";
 import {
   workspaceMembersPatchSchema,
@@ -163,6 +164,40 @@ router.delete(
   requireAuth,
   generalLimiter,
   deleteWorkspaceMembersById,
+);
+
+/**
+ * @openapi
+ * /workspaces/{workspaceId}/members/{userId}/reset-password:
+ *   post:
+ *     summary: Generate a fresh temporary password for a member who hasn't set their own yet (admin only)
+ *     tags: [Workspace Members]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: workspaceId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Temporary password reset successfully
+ *       401:
+ *         description: Unauthorized — missing or invalid access token
+ *       403:
+ *         description: Forbidden — requester is not a workspace admin, or the member has already set their own password
+ *       404:
+ *         description: Member not found
+ */
+router.post(
+  "/:workspaceId/members/:userId/reset-password",
+  requireAuth,
+  generalLimiter,
+  resetMemberPassword,
 );
 
 export default router;

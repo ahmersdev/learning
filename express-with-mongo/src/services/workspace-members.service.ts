@@ -115,8 +115,13 @@ export const postWorkspaceMembersService = async (
 
 export const getWorkspaceMembersService = async (workspaceId: string) => {
   const memberships = await WorkspaceMember.find({ workspaceId }).populate<{
-    userId: { _id: string; username: string; email: string };
-  }>("userId", "username email");
+    userId: {
+      _id: string;
+      username: string;
+      email: string;
+      mustChangePassword: boolean;
+    };
+  }>("userId", "username email mustChangePassword");
 
   return memberships.map((membership) => ({
     id: membership.id,
@@ -125,6 +130,7 @@ export const getWorkspaceMembersService = async (workspaceId: string) => {
     username: membership.userId.username,
     email: membership.userId.email,
     role: membership.role,
+    mustChangePassword: membership.userId.mustChangePassword,
   }));
 };
 
@@ -186,4 +192,43 @@ export const deleteWorkspaceMembersByIdService = async (
   }
 
   return;
+};
+
+export const resetMemberPasswordService = async (
+  requesterRole: "admin" | "member",
+  workspaceId: string,
+  targetUserId: string,
+) => {
+  assertIsAdmin(requesterRole);
+
+  const membership = await WorkspaceMember.findOne({
+    workspaceId,
+    userId: targetUserId,
+  });
+
+  if (!membership) {
+    throw new AppError("Member not found", 404);
+  }
+
+  const user = await User.findById(targetUserId);
+
+  if (!user) {
+    throw new AppError("Member not found", 404);
+  }
+
+  if (!user.mustChangePassword) {
+    throw new ForbiddenError(
+      "This member has already set their own password and cannot be reset this way",
+    );
+  }
+
+  const temporaryPassword = generateTempPassword();
+  user.password = await bcrypt.hash(temporaryPassword, SALT_ROUNDS);
+  await user.save();
+
+  console.log(
+    `[workspace-members] Reset temporary password for ${user.email}: ${temporaryPassword}`,
+  );
+
+  return { temporaryPassword };
 };

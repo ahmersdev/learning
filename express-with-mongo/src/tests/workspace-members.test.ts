@@ -398,4 +398,168 @@ describe("Workspace member routes", () => {
       expect(res.status).toBe(403);
     });
   });
+
+  describe("GET /api/v1/workspaces/:workspaceId/members (mustChangePassword visibility)", () => {
+    it("shows mustChangePassword true for a newly provisioned member", async () => {
+      const { accessToken, workspaceId } = await createWorkspaceAsAdmin();
+
+      await request(app)
+        .post(`/api/v1/workspaces/${workspaceId}/members`)
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({ email: "pending@example.com", role: "member" });
+
+      const res = await request(app)
+        .get(`/api/v1/workspaces/${workspaceId}/members`)
+        .set("Authorization", `Bearer ${accessToken}`);
+
+      const member = res.body.data.members.find(
+        (m: { email: string }) => m.email === "pending@example.com",
+      );
+      expect(member.mustChangePassword).toBe(true);
+      expect(member.password).toBeUndefined();
+    });
+
+    it("shows mustChangePassword false once a member changes their own password", async () => {
+      const { accessToken, workspaceId } = await createWorkspaceAsAdmin();
+
+      const addRes = await request(app)
+        .post(`/api/v1/workspaces/${workspaceId}/members`)
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({ email: "settled@example.com", role: "member" });
+
+      const signinRes = await request(app).post("/api/v1/auth/signin").send({
+        email: "settled@example.com",
+        password: addRes.body.data.temporaryPassword,
+      });
+
+      await request(app)
+        .patch("/api/v1/auth/change-password")
+        .set("Authorization", `Bearer ${signinRes.body.data.accessToken}`)
+        .send({
+          currentPassword: addRes.body.data.temporaryPassword,
+          newPassword: "MyOwnPassword1!",
+        });
+
+      const res = await request(app)
+        .get(`/api/v1/workspaces/${workspaceId}/members`)
+        .set("Authorization", `Bearer ${accessToken}`);
+
+      const member = res.body.data.members.find(
+        (m: { email: string }) => m.email === "settled@example.com",
+      );
+      expect(member.mustChangePassword).toBe(false);
+    });
+  });
+
+  describe("POST /api/v1/workspaces/:workspaceId/members/:userId/reset-password", () => {
+    it("returns 401 with no access token", async () => {
+      const res = await request(app).post(
+        "/api/v1/workspaces/000000000000000000000000/members/000000000000000000000000/reset-password",
+      );
+      expect(res.status).toBe(401);
+    });
+
+    it("returns 404 for a nonexistent member", async () => {
+      const { accessToken, workspaceId } = await createWorkspaceAsAdmin();
+
+      const res = await request(app)
+        .post(
+          `/api/v1/workspaces/${workspaceId}/members/000000000000000000000000/reset-password`,
+        )
+        .set("Authorization", `Bearer ${accessToken}`);
+
+      expect(res.status).toBe(404);
+    });
+
+    it("generates a new working temporary password for a pending member", async () => {
+      const { accessToken, workspaceId } = await createWorkspaceAsAdmin();
+
+      const addRes = await request(app)
+        .post(`/api/v1/workspaces/${workspaceId}/members`)
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({ email: "lostinvite@example.com", role: "member" });
+
+      const resetRes = await request(app)
+        .post(
+          `/api/v1/workspaces/${workspaceId}/members/${addRes.body.data.member.userId}/reset-password`,
+        )
+        .set("Authorization", `Bearer ${accessToken}`);
+
+      expect(resetRes.status).toBe(200);
+      expect(resetRes.body.data.temporaryPassword).toBeDefined();
+      // The reset password is different from the original one
+      expect(resetRes.body.data.temporaryPassword).not.toBe(
+        addRes.body.data.temporaryPassword,
+      );
+
+      // Old temp password no longer works
+      const oldSignin = await request(app).post("/api/v1/auth/signin").send({
+        email: "lostinvite@example.com",
+        password: addRes.body.data.temporaryPassword,
+      });
+      expect(oldSignin.status).toBe(401);
+
+      // New temp password works
+      const newSignin = await request(app).post("/api/v1/auth/signin").send({
+        email: "lostinvite@example.com",
+        password: resetRes.body.data.temporaryPassword,
+      });
+      expect(newSignin.status).toBe(200);
+    });
+
+    it("returns 403 when the member has already set their own password", async () => {
+      const { accessToken, workspaceId } = await createWorkspaceAsAdmin();
+
+      const addRes = await request(app)
+        .post(`/api/v1/workspaces/${workspaceId}/members`)
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({ email: "settledmember@example.com", role: "member" });
+
+      const signinRes = await request(app).post("/api/v1/auth/signin").send({
+        email: "settledmember@example.com",
+        password: addRes.body.data.temporaryPassword,
+      });
+
+      await request(app)
+        .patch("/api/v1/auth/change-password")
+        .set("Authorization", `Bearer ${signinRes.body.data.accessToken}`)
+        .send({
+          currentPassword: addRes.body.data.temporaryPassword,
+          newPassword: "MyOwnPassword1!",
+        });
+
+      const res = await request(app)
+        .post(
+          `/api/v1/workspaces/${workspaceId}/members/${addRes.body.data.member.userId}/reset-password`,
+        )
+        .set("Authorization", `Bearer ${accessToken}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it("returns 403 for a non-admin member", async () => {
+      const { accessToken, workspaceId } = await createWorkspaceAsAdmin();
+
+      const addRes = await request(app)
+        .post(`/api/v1/workspaces/${workspaceId}/members`)
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({ email: "regularmember@example.com", role: "member" });
+
+      const memberSigninRes = await request(app)
+        .post("/api/v1/auth/signin")
+        .send({
+          email: "regularmember@example.com",
+          password: addRes.body.data.temporaryPassword,
+        });
+
+      const res = await request(app)
+        .post(
+          `/api/v1/workspaces/${workspaceId}/members/${addRes.body.data.member.userId}/reset-password`,
+        )
+        .set("Authorization", `Bearer ${memberSigninRes.body.data.accessToken}`)
+        .send();
+
+      expect(res.status).toBe(403);
+    });
+  });
 });
