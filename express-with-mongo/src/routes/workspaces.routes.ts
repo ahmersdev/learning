@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { requireAuth } from "../middlewares/auth.middleware.ts";
+import { requireAdmin } from "../middlewares/require-admin.middleware.ts";
 import { validate } from "../middlewares/validate.middleware.ts";
 import { generalLimiter } from "../middlewares/rate-limiter.middleware.ts";
 import {
@@ -20,7 +21,7 @@ const router = Router();
  * @openapi
  * /workspaces:
  *   post:
- *     summary: Create a new workspace
+ *     summary: Create a new workspace (admin only)
  *     tags: [Workspaces]
  *     security:
  *       - bearerAuth: []
@@ -41,10 +42,13 @@ const router = Router();
  *         description: Validation failed
  *       401:
  *         description: Unauthorized — missing or invalid access token
+ *       403:
+ *         description: Forbidden — admin access required
  */
 router.post(
   "/",
   requireAuth,
+  requireAdmin,
   generalLimiter,
   validate(workspacePostSchema),
   postWorkspace,
@@ -54,7 +58,7 @@ router.post(
  * @openapi
  * /workspaces:
  *   get:
- *     summary: List all workspaces owned by the currently authenticated user
+ *     summary: List all workspaces owned by the currently authenticated user (admin only)
  *     tags: [Workspaces]
  *     security:
  *       - bearerAuth: []
@@ -63,14 +67,16 @@ router.post(
  *         description: List of workspaces retrieved successfully
  *       401:
  *         description: Unauthorized — missing or invalid access token
+ *       403:
+ *         description: Forbidden — admin access required
  */
-router.get("/", requireAuth, generalLimiter, getWorkspace);
+router.get("/", requireAuth, requireAdmin, generalLimiter, getWorkspace);
 
 /**
  * @openapi
  * /workspaces/{workspaceId}:
  *   get:
- *     summary: Get a single workspace by ID
+ *     summary: Get a single workspace by ID (admin only)
  *     tags: [Workspaces]
  *     security:
  *       - bearerAuth: []
@@ -85,16 +91,24 @@ router.get("/", requireAuth, generalLimiter, getWorkspace);
  *         description: Workspace retrieved successfully
  *       401:
  *         description: Unauthorized — missing or invalid access token
+ *       403:
+ *         description: Forbidden — admin access required
  *       404:
  *         description: Workspace not found
  */
-router.get("/:workspaceId", requireAuth, generalLimiter, getWorkspaceById);
+router.get(
+  "/:workspaceId",
+  requireAuth,
+  requireAdmin,
+  generalLimiter,
+  getWorkspaceById,
+);
 
 /**
  * @openapi
  * /workspaces/{workspaceId}:
  *   patch:
- *     summary: Update a workspace's name and/or description
+ *     summary: Update a workspace's name and/or description (admin only)
  *     tags: [Workspaces]
  *     security:
  *       - bearerAuth: []
@@ -121,12 +135,15 @@ router.get("/:workspaceId", requireAuth, generalLimiter, getWorkspaceById);
  *         description: Validation failed
  *       401:
  *         description: Unauthorized — missing or invalid access token
+ *       403:
+ *         description: Forbidden — admin access required
  *       404:
  *         description: Workspace not found
  */
 router.patch(
   "/:workspaceId",
   requireAuth,
+  requireAdmin,
   generalLimiter,
   validate(workspacePatchSchema),
   patchWorkspaceById,
@@ -136,7 +153,7 @@ router.patch(
  * @openapi
  * /workspaces/{workspaceId}:
  *   delete:
- *     summary: Delete a workspace
+ *     summary: Delete a workspace (admin only)
  *     tags: [Workspaces]
  *     security:
  *       - bearerAuth: []
@@ -151,12 +168,15 @@ router.patch(
  *         description: Workspace deleted successfully
  *       401:
  *         description: Unauthorized — missing or invalid access token
+ *       403:
+ *         description: Forbidden — admin access required
  *       404:
  *         description: Workspace not found
  */
 router.delete(
   "/:workspaceId",
   requireAuth,
+  requireAdmin,
   generalLimiter,
   deleteWorkspaceById,
 );
