@@ -33,6 +33,7 @@ const issueTokens = async (
   email: string,
   fullName: string,
   username: string,
+  role: "admin" | "user",
   userAgent?: string,
 ) => {
   const session = await Session.create({
@@ -46,6 +47,7 @@ const issueTokens = async (
     email,
     fullName,
     username,
+    role,
   });
   const refreshToken = generateRefreshToken({
     userId,
@@ -97,6 +99,7 @@ export const createUserService = async (
     user.email,
     user.fullName,
     user.username,
+    user.role,
     userAgent,
   );
 
@@ -105,6 +108,7 @@ export const createUserService = async (
       fullName: user.fullName,
       username: user.username,
       email: user.email,
+      role: user.role,
     },
     accessToken,
     refreshToken,
@@ -136,11 +140,12 @@ export const signinService = async (
     user.email,
     user.fullName,
     user.username,
+    user.role,
     userAgent,
   );
 
   return {
-    user: { username: user.username, email: user.email },
+    user: { username: user.username, email: user.email, role: user.role },
     accessToken,
     refreshToken,
   };
@@ -169,6 +174,7 @@ export const refreshSessionService = async (
     email,
     user.fullName,
     user.username,
+    user.role,
     session.userAgent,
   );
 };

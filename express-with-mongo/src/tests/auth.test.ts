@@ -10,8 +10,6 @@ const testUser = {
   password: "Password1!",
 };
 
-// Pulls just the refreshToken=... value out of a Set-Cookie header so it
-// can be replayed manually in tests that don't use a persistent agent
 const extractRefreshCookie = (
   setCookieHeader: string | string[] | undefined,
 ): string => {
@@ -36,6 +34,13 @@ describe("Auth routes", () => {
       expect(res.status).toBe(201);
       expect(res.body.data.accessToken).toBeDefined();
       expect(res.headers["set-cookie"]?.[0]).toMatch(/refreshToken=/);
+    });
+
+    it("defaults the new user's role to admin", async () => {
+      const res = await request(app).post("/api/v1/auth/signup").send(testUser);
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.user.role).toBe("admin");
     });
 
     it("rejects weak password", async () => {
@@ -66,6 +71,15 @@ describe("Auth routes", () => {
 
       expect(res.status).toBe(409);
     });
+
+    it("ignores a client-supplied role field (role cannot be set via signup)", async () => {
+      const res = await request(app)
+        .post("/api/v1/auth/signup")
+        .send({ ...testUser, role: "user" });
+
+      // signupSchema is .strict(), so an unknown "role" field is rejected outright
+      expect(res.status).toBe(400);
+    });
   });
 
   describe("POST /api/v1/auth/signin", () => {
@@ -80,6 +94,18 @@ describe("Auth routes", () => {
       expect(res.status).toBe(200);
       expect(res.body.data.accessToken).toBeDefined();
       expect(res.headers["set-cookie"]?.[0]).toMatch(/refreshToken=/);
+    });
+
+    it("returns the user's role on signin", async () => {
+      await request(app).post("/api/v1/auth/signup").send(testUser);
+
+      const res = await request(app).post("/api/v1/auth/signin").send({
+        email: testUser.email,
+        password: testUser.password,
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.user.role).toBe("admin");
     });
 
     it("rejects when neither username nor email provided", async () => {
@@ -125,17 +151,14 @@ describe("Auth routes", () => {
       const cookie1 = extractRefreshCookie(login1.headers["set-cookie"]);
       const cookie2 = extractRefreshCookie(login2.headers["set-cookie"]);
 
-      // Two independent sessions -> two different refresh tokens
       expect(cookie1).not.toBe(cookie2);
 
-      // Both should still work independently, proving neither login
-      // invalidated the other
       const refresh1 = await request(app)
         .post("/api/v1/auth/refresh")
-        .set("Cookie", [cookie1!]);
+        .set("Cookie", [cookie1]);
       const refresh2 = await request(app)
         .post("/api/v1/auth/refresh")
-        .set("Cookie", [cookie2!]);
+        .set("Cookie", [cookie2]);
 
       expect(refresh1.status).toBe(200);
       expect(refresh2.status).toBe(200);
@@ -156,7 +179,7 @@ describe("Auth routes", () => {
           sessionId: "000000000000000000000000",
         },
         process.env.JWT_REFRESH_SECRET!,
-        { expiresIn: "-1s" }, // already expired
+        { expiresIn: "-1s" },
       );
 
       const res = await request(app)
@@ -167,8 +190,6 @@ describe("Auth routes", () => {
     });
 
     it("returns 401 when the session no longer exists", async () => {
-      // A validly-signed token, but its sessionId doesn't correspond to
-      // any real Session document (never created, or already deleted)
       const orphanToken = jwt.sign(
         {
           userId: "000000000000000000000001",
@@ -197,7 +218,7 @@ describe("Auth routes", () => {
 
       const res = await request(app)
         .post("/api/v1/auth/refresh")
-        .set("Cookie", [originalCookie!]);
+        .set("Cookie", [originalCookie]);
 
       expect(res.status).toBe(200);
       expect(res.body.data.accessToken).toBeDefined();
@@ -216,15 +237,13 @@ describe("Auth routes", () => {
         signupRes.headers["set-cookie"],
       );
 
-      // First refresh succeeds and rotates the session
       await request(app)
         .post("/api/v1/auth/refresh")
-        .set("Cookie", [originalCookie!]);
+        .set("Cookie", [originalCookie]);
 
-      // Replaying the now-dead original token should fail
       const reuseRes = await request(app)
         .post("/api/v1/auth/refresh")
-        .set("Cookie", [originalCookie!]);
+        .set("Cookie", [originalCookie]);
 
       expect(reuseRes.status).toBe(401);
     });
@@ -246,13 +265,13 @@ describe("Auth routes", () => {
 
       const signoutRes = await request(app)
         .post("/api/v1/auth/signout")
-        .set("Cookie", [cookie!]);
+        .set("Cookie", [cookie]);
 
       expect(signoutRes.status).toBe(200);
 
       const refreshRes = await request(app)
         .post("/api/v1/auth/refresh")
-        .set("Cookie", [cookie!]);
+        .set("Cookie", [cookie]);
 
       expect(refreshRes.status).toBe(401);
     });

@@ -1,10 +1,14 @@
 import mongoose, { Schema, type Document, type Model } from "mongoose";
 
+const userRoles = ["admin", "user"] as const;
+export type UserRole = (typeof userRoles)[number];
+
 export interface IUser extends Document {
   fullName: string;
   username: string;
   email: string;
   password: string;
+  role: UserRole;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -34,7 +38,14 @@ const userSchema = new Schema<IUser>(
     password: {
       type: String,
       required: true,
-      select: false, // never return password hash by default on queries
+      select: false,
+    },
+    role: {
+      type: String,
+      enum: userRoles,
+      default: "admin",
+      // No `select: false` here — role needs to be readable normally,
+      // unlike password. It's just not writable via any Zod schema.
     },
   },
   { timestamps: true },

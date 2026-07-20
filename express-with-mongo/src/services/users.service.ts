@@ -13,6 +13,18 @@ const isDuplicateKeyError = (
   );
 };
 
+export const getAllUsersService = async () => {
+  const users = await User.find();
+
+  return users.map((user) => ({
+    id: user.id,
+    fullName: user.fullName,
+    username: user.username,
+    email: user.email,
+    role: user.role,
+  }));
+};
+
 export const getUserService = async (userId: string) => {
   const user = await User.findById(userId);
 
@@ -25,6 +37,7 @@ export const getUserService = async (userId: string) => {
     fullName: user.fullName,
     username: user.username,
     email: user.email,
+    role: user.role,
   };
 };
 

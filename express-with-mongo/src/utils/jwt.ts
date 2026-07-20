@@ -42,6 +42,7 @@ export interface AccessTokenPayload {
   email: string;
   fullName: string;
   username: string;
+  role: "admin" | "user";
 }
 
 export interface RefreshTokenPayload {

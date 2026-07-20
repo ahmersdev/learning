@@ -11,6 +11,7 @@ declare global {
         email: string;
         fullName: string;
         username: string;
+        role: "admin" | "user";
       };
     }
   }
@@ -41,6 +42,7 @@ export const requireAuth = (
       email: decoded.email,
       fullName: decoded.fullName,
       username: decoded.username,
+      role: decoded.role,
     };
 
     next();

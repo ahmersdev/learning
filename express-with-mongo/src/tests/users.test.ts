@@ -10,10 +10,17 @@ const testUser = {
   password: "Password1!",
 };
 
-// Signs up a fresh user and returns their real access token, so tests
-// exercise the actual DB-backed flow instead of a hand-crafted JWT
-const signupAndGetToken = async (): Promise<string> => {
-  const res = await request(app).post("/api/v1/auth/signup").send(testUser);
+const otherUser = {
+  fullName: "Other User",
+  username: "otheruser",
+  email: "other@example.com",
+  password: "Password1!",
+};
+
+const signupAndGetToken = async (
+  user: typeof testUser = testUser,
+): Promise<string> => {
+  const res = await request(app).post("/api/v1/auth/signup").send(user);
   return res.body.data.accessToken;
 };
 
@@ -39,6 +46,7 @@ describe("User routes", () => {
           email: "test@example.com",
           fullName: "Test User",
           username: "testuser",
+          role: "admin",
         },
         process.env.JWT_ACCESS_SECRET!,
         { expiresIn: "-1s" },
@@ -52,13 +60,13 @@ describe("User routes", () => {
     });
 
     it("returns 404 when the token's user no longer exists in the DB", async () => {
-      // Validly-signed token, but no matching User document was ever created
       const orphanToken = jwt.sign(
         {
           userId: "000000000000000000000002",
           email: "ghost@example.com",
           fullName: "Ghost User",
           username: "ghostuser",
+          role: "admin",
         },
         process.env.JWT_ACCESS_SECRET!,
         { expiresIn: "15m" },
@@ -71,7 +79,7 @@ describe("User routes", () => {
       expect(res.status).toBe(404);
     });
 
-    it("returns the real user profile from the DB with a valid access token", async () => {
+    it("returns the real user profile including role from the DB", async () => {
       const accessToken = await signupAndGetToken();
 
       const res = await request(app)
@@ -82,6 +90,7 @@ describe("User routes", () => {
       expect(res.body.data.user.fullName).toBe(testUser.fullName);
       expect(res.body.data.user.username).toBe(testUser.username);
       expect(res.body.data.user.email).toBe(testUser.email);
+      expect(res.body.data.user.role).toBe("admin");
     });
   });
 
@@ -111,8 +120,20 @@ describe("User routes", () => {
       const res = await request(app)
         .patch("/api/v1/users/me")
         .set("Authorization", `Bearer ${accessToken}`)
-        .send({ email: "new@example.com" }); // not allowed by userSchema (.strict())
+        .send({ email: "new@example.com" });
 
+      expect(res.status).toBe(400);
+    });
+
+    it("returns 400 when attempting to patch role (not an editable field)", async () => {
+      const accessToken = await signupAndGetToken();
+
+      const res = await request(app)
+        .patch("/api/v1/users/me")
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({ role: "user" });
+
+      // userSchema is .strict(), so "role" is an unrecognized field
       expect(res.status).toBe(400);
     });
 
@@ -127,7 +148,6 @@ describe("User routes", () => {
       expect(patchRes.status).toBe(200);
       expect(patchRes.body.data.user.fullName).toBe("Updated Name");
 
-      // Confirm the update actually persisted, not just echoed back
       const getRes = await request(app)
         .get("/api/v1/users/me")
         .set("Authorization", `Bearer ${accessToken}`);
@@ -159,11 +179,10 @@ describe("User routes", () => {
     });
 
     it("returns 409 when patching to a username that's already taken", async () => {
-      // A second, distinct user already owns "takenname"
       await request(app).post("/api/v1/auth/signup").send({
         fullName: "Other User",
         username: "takenname",
-        email: "other@example.com",
+        email: "taken@example.com",
         password: "Password1!",
       });
 
@@ -175,6 +194,51 @@ describe("User routes", () => {
         .send({ username: "takenname" });
 
       expect(res.status).toBe(409);
+    });
+  });
+
+  describe("GET /api/v1/users", () => {
+    it("returns 401 with no access token", async () => {
+      const res = await request(app).get("/api/v1/users");
+      expect(res.status).toBe(401);
+    });
+
+    it("returns 403 when the requester is not an admin", async () => {
+      // Every signup currently defaults to admin, so we hand-craft a
+      // token with role "user" to simulate a non-admin caller once
+      // that role actually becomes assignable in the future
+      const nonAdminToken = jwt.sign(
+        {
+          userId: "000000000000000000000003",
+          email: testUser.email,
+          fullName: testUser.fullName,
+          username: testUser.username,
+          role: "user",
+        },
+        process.env.JWT_ACCESS_SECRET!,
+        { expiresIn: "15m" },
+      );
+
+      const res = await request(app)
+        .get("/api/v1/users")
+        .set("Authorization", `Bearer ${nonAdminToken}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it("returns the full user list for an admin, including role", async () => {
+      const accessToken = await signupAndGetToken();
+      await signupAndGetToken(otherUser);
+
+      const res = await request(app)
+        .get("/api/v1/users")
+        .set("Authorization", `Bearer ${accessToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.users).toHaveLength(2);
+      expect(
+        res.body.data.users.every((u: { role: string }) => u.role === "admin"),
+      ).toBe(true);
     });
   });
 });

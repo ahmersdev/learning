@@ -2,9 +2,27 @@ import { type Request, type Response, type NextFunction } from "express";
 import type { UserUpdateInput } from "../schemas/users.schema.ts";
 import { AppError } from "../utils/app-errors.ts";
 import {
+  getAllUsersService,
   getUserService,
   updateUserService,
 } from "../services/users.service.ts";
+
+export const getAllUsers = async (
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    const users = await getAllUsersService();
+
+    return res.status(200).json({
+      status: "success",
+      data: { users },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 export const getUser = async (
   req: Request,
