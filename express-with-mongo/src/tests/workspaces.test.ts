@@ -1,5 +1,6 @@
 import { describe, it, expect } from "@jest/globals";
 import request from "supertest";
+import jwt from "jsonwebtoken";
 import app from "../app.ts";
 
 const testUser = {
@@ -24,6 +25,62 @@ const signupAndGetToken = async (
 };
 
 describe("Workspace routes", () => {
+  describe("Admin authorization", () => {
+    const nonAdminToken = jwt.sign(
+      {
+        userId: "000000000000000000000099",
+        email: "nonadmin@example.com",
+        fullName: "Non Admin",
+        username: "nonadmin",
+        role: "user",
+      },
+      process.env.JWT_ACCESS_SECRET!,
+      { expiresIn: "15m" },
+    );
+
+    it("returns 403 on POST /workspaces for a non-admin", async () => {
+      const res = await request(app)
+        .post("/api/v1/workspaces")
+        .set("Authorization", `Bearer ${nonAdminToken}`)
+        .send({ name: "Should Not Be Created" });
+
+      expect(res.status).toBe(403);
+    });
+
+    it("returns 403 on GET /workspaces for a non-admin", async () => {
+      const res = await request(app)
+        .get("/api/v1/workspaces")
+        .set("Authorization", `Bearer ${nonAdminToken}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it("returns 403 on GET /workspaces/:workspaceId for a non-admin", async () => {
+      const res = await request(app)
+        .get("/api/v1/workspaces/000000000000000000000000")
+        .set("Authorization", `Bearer ${nonAdminToken}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it("returns 403 on PATCH /workspaces/:workspaceId for a non-admin", async () => {
+      const res = await request(app)
+        .patch("/api/v1/workspaces/000000000000000000000000")
+        .set("Authorization", `Bearer ${nonAdminToken}`)
+        .send({ name: "Hijacked" });
+
+      expect(res.status).toBe(403);
+    });
+
+    it("returns 403 on DELETE /workspaces/:workspaceId for a non-admin", async () => {
+      const res = await request(app)
+        .delete("/api/v1/workspaces/000000000000000000000000")
+        .set("Authorization", `Bearer ${nonAdminToken}`);
+
+      expect(res.status).toBe(403);
+    });
+  });
+
   describe("POST /api/v1/workspaces", () => {
     it("returns 401 with no access token", async () => {
       const res = await request(app)
