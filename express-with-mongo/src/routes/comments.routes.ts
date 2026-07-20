@@ -12,6 +12,7 @@ import {
   commentPatchSchema,
   commentPostSchema,
 } from "../schemas/comments.schema.ts";
+import { validateObjectId } from "../middlewares/validate-object-id.middleware.ts";
 
 const router = Router();
 
@@ -50,6 +51,7 @@ const router = Router();
 router.post(
   "/:taskId/comments",
   requireAuth,
+  validateObjectId("taskId"),
   generalLimiter,
   validate(commentPostSchema),
   postComment,
@@ -76,7 +78,13 @@ router.post(
  *       404:
  *         description: Task not found
  */
-router.get("/:taskId/comments", requireAuth, generalLimiter, getComments);
+router.get(
+  "/:taskId/comments",
+  requireAuth,
+  validateObjectId("taskId"),
+  generalLimiter,
+  getComments,
+);
 
 /**
  * @openapi
@@ -119,6 +127,7 @@ router.get("/:taskId/comments", requireAuth, generalLimiter, getComments);
 router.patch(
   "/:taskId/comments/:commentId",
   requireAuth,
+  validateObjectId("taskId", "commentId"),
   generalLimiter,
   validate(commentPatchSchema),
   patchCommentById,
@@ -154,6 +163,7 @@ router.patch(
 router.delete(
   "/:taskId/comments/:commentId",
   requireAuth,
+  validateObjectId("taskId", "commentId"),
   generalLimiter,
   deleteCommentById,
 );

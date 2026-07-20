@@ -1,37 +1,64 @@
-import crypto from "crypto";
 import type {
   CommentPostInput,
   CommentPatchInput,
 } from "../schemas/comments.schema.ts";
 import { AppError, ForbiddenError } from "../utils/app-errors.ts";
+import { Comment } from "../models/comment.model.ts";
+import { Task } from "../models/task.model.ts";
+import { Project } from "../models/project.model.ts";
+import { WorkspaceMember } from "../models/workspace-member.model.ts";
 
-// TODO: once DB is wired up:
-// - assertCanAccessTask should look up the task, trace it back to its
-//   project -> workspace, and confirm the requesting user is a member
-//   of that workspace (throw AppError 404 "Task not found" if either
-//   the task doesn't exist or the user isn't a member)
-// - assertIsCommentAuthor should look up the real comment and compare
-//   its authorId to the requesting user (throw AppError 404 "Comment
-//   not found" if it doesn't exist, ForbiddenError if it exists but
-//   belongs to someone else)
-// - all functions should perform real queries/writes scoped to taskId
-
+// A comment's parent chain is Comment -> Task -> Project -> Workspace.
+// Same "404 not 403" pattern as tasks.service.ts's assertCanAccessProject,
+// just one hop further up the chain.
 export const assertCanAccessTask = async (
   taskId: string,
   userId: string,
 ): Promise<void> => {
-  // TODO: check task exists + user is a member of its workspace
-  return;
+  const task = await Task.findById(taskId);
+
+  if (!task) {
+    throw new AppError("Task not found", 404);
+  }
+
+  const project = await Project.findById(task.projectId);
+
+  if (!project) {
+    throw new AppError("Task not found", 404);
+  }
+
+  const membership = await WorkspaceMember.findOne({
+    workspaceId: project.workspaceId,
+    userId,
+  });
+
+  if (!membership) {
+    throw new AppError("Task not found", 404);
+  }
 };
 
 export const assertIsCommentAuthor = async (
   commentId: string,
   userId: string,
 ): Promise<void> => {
-  // TODO: look up real comment.authorId and compare to userId
-  // For now stub every requester as the author so the flow can be tested
-  return;
+  const comment = await Comment.findById(commentId);
+
+  if (!comment) {
+    throw new AppError("Comment not found", 404);
+  }
+
+  if (comment.authorId.toString() !== userId) {
+    throw new ForbiddenError("You can only modify your own comments");
+  }
 };
+
+const toCommentResponse = (comment: InstanceType<typeof Comment>) => ({
+  id: comment.id,
+  taskId: comment.taskId.toString(),
+  authorId: comment.authorId.toString(),
+  content: comment.content,
+  createdAt: comment.createdAt.toISOString(),
+});
 
 export const postCommentService = async (
   taskId: string,
@@ -40,26 +67,15 @@ export const postCommentService = async (
 ) => {
   const { content } = commentData;
 
-  return {
-    id: crypto.randomUUID(),
-    taskId,
-    authorId,
-    content,
-    createdAt: new Date().toISOString(),
-  };
+  const comment = await Comment.create({ taskId, authorId, content });
+
+  return toCommentResponse(comment);
 };
 
 export const getCommentsService = async (taskId: string) => {
-  // TODO: return all comments where taskId matches
-  return [
-    {
-      id: crypto.randomUUID(),
-      taskId,
-      authorId: "stub-author-id",
-      content: "Stub comment",
-      createdAt: new Date().toISOString(),
-    },
-  ];
+  const comments = await Comment.find({ taskId }).sort({ createdAt: 1 }); // oldest first, like a real comment thread
+
+  return comments.map(toCommentResponse);
 };
 
 export const patchCommentByIdService = async (
@@ -67,26 +83,28 @@ export const patchCommentByIdService = async (
   commentId: string,
   updates: CommentPatchInput,
 ) => {
-  // TODO: find comment by id -> if not found OR not on this task,
-  // throw new AppError("Comment not found", 404)
-  // apply updates, save
+  const comment = await Comment.findOneAndUpdate(
+    { _id: commentId, taskId },
+    { $set: updates },
+    { new: true, runValidators: true },
+  );
 
-  return {
-    id: commentId,
-    taskId,
-    authorId: "stub-author-id",
-    content: updates.content,
-    createdAt: new Date().toISOString(),
-  };
+  if (!comment) {
+    throw new AppError("Comment not found", 404);
+  }
+
+  return toCommentResponse(comment);
 };
 
 export const deleteCommentByIdService = async (
   taskId: string,
   commentId: string,
 ) => {
-  // TODO: find comment by id -> if not found OR not on this task,
-  // throw new AppError("Comment not found", 404)
-  // delete from DB
+  const comment = await Comment.findOneAndDelete({ _id: commentId, taskId });
+
+  if (!comment) {
+    throw new AppError("Comment not found", 404);
+  }
 
   return;
 };
