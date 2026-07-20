@@ -140,6 +140,25 @@ describe("Workspace routes", () => {
       expect(res.body.data.workspace.ownerId).toBeDefined();
     });
 
+    it("automatically makes the creator an admin member of the new workspace", async () => {
+      const accessToken = await signupAndGetToken();
+
+      const createRes = await request(app)
+        .post("/api/v1/workspaces")
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({ name: "Auto Membership Test" });
+
+      const workspaceId = createRes.body.data.workspace.id;
+
+      const membersRes = await request(app)
+        .get(`/api/v1/workspaces/${workspaceId}/members`)
+        .set("Authorization", `Bearer ${accessToken}`);
+
+      expect(membersRes.status).toBe(200);
+      expect(membersRes.body.data.members).toHaveLength(1);
+      expect(membersRes.body.data.members[0].role).toBe("admin");
+    });
+
     it("creates a workspace without a description", async () => {
       const accessToken = await signupAndGetToken();
 

@@ -1,11 +1,15 @@
 import bcrypt from "bcrypt";
-import crypto from "crypto";
 import type {
   WorkspaceMembersPostInput,
   WorkspaceMembersPatchInput,
 } from "../schemas/workspace-members.schema.ts";
-import { ForbiddenError } from "../utils/app-errors.ts";
+import {
+  AppError,
+  ConflictError,
+  ForbiddenError,
+} from "../utils/app-errors.ts";
 import { User } from "../models/user.model.ts";
+import { WorkspaceMember } from "../models/workspace-member.model.ts";
 import {
   generateUsernameFromEmail,
   generateTempPassword,
@@ -13,14 +17,27 @@ import {
 
 const SALT_ROUNDS = 10;
 
-// TODO: once a WorkspaceMember model exists, getRequesterRoleService should
-// look up the requesting user's actual role in this workspace (throw
-// AppError 404 if they aren't a member at all)
+const isDuplicateKeyError = (error: unknown): boolean =>
+  typeof error === "object" &&
+  error !== null &&
+  "code" in error &&
+  (error as { code: unknown }).code === 11000;
+
+// A user requesting info about a workspace they're not a member of gets
+// the same 404 as a workspace that doesn't exist at all — this keeps
+// getRequesterRoleService as the single gate every members-route passes
+// through, so that leak-avoidance guarantee holds everywhere it's called
 export const getRequesterRoleService = async (
   workspaceId: string,
   userId: string,
 ): Promise<"admin" | "member"> => {
-  return "admin";
+  const membership = await WorkspaceMember.findOne({ workspaceId, userId });
+
+  if (!membership) {
+    throw new AppError("Workspace not found", 404);
+  }
+
+  return membership.role;
 };
 
 const assertIsAdmin = (role: "admin" | "member") => {
@@ -51,65 +68,122 @@ export const postWorkspaceMembersService = async (
       username,
       email,
       password: hashedPassword,
-      role: "user", // global platform role — distinct from the workspace-scoped role below
+      role: "user",
       mustChangePassword: true,
     });
 
-    // Fallback delivery channel since no email service is wired up yet
     console.log(
       `[workspace-members] Temporary password for new member ${email}: ${temporaryPassword}`,
     );
+  } else {
+    const existingMembership = await WorkspaceMember.findOne({
+      workspaceId,
+      userId: user.id,
+    });
+
+    if (existingMembership) {
+      throw new ConflictError("User is already a member of this workspace");
+    }
   }
 
-  // TODO: once a WorkspaceMember model exists, check if this user is
-  // already a member of this workspace -> throw ConflictError instead of
-  // silently allowing duplicate membership
+  let membership;
+  try {
+    membership = await WorkspaceMember.create({
+      workspaceId,
+      userId: user.id,
+      role,
+    });
+  } catch (error) {
+    if (isDuplicateKeyError(error)) {
+      throw new ConflictError("User is already a member of this workspace");
+    }
+    throw error;
+  }
 
   return {
     member: {
-      id: crypto.randomUUID(), // TODO: replace with the real WorkspaceMember _id once that model exists
+      id: membership.id,
       workspaceId,
       userId: user.id,
-      email: user.email,
       username: user.username,
-      role,
+      email: user.email,
+      role: membership.role,
     },
     ...(temporaryPassword ? { temporaryPassword } : {}),
   };
 };
 
 export const getWorkspaceMembersService = async (workspaceId: string) => {
-  return [
-    {
-      id: crypto.randomUUID(),
-      workspaceId,
-      email: "stub-member@example.com",
-      role: "member" as const,
-    },
-  ];
+  const memberships = await WorkspaceMember.find({ workspaceId }).populate<{
+    userId: { _id: string; username: string; email: string };
+  }>("userId", "username email");
+
+  return memberships.map((membership) => ({
+    id: membership.id,
+    workspaceId,
+    userId: membership.userId._id.toString(),
+    username: membership.userId.username,
+    email: membership.userId.email,
+    role: membership.role,
+  }));
 };
 
 export const patchWorkspaceMembersByIdService = async (
   requesterRole: "admin" | "member",
+  requesterId: string,
   workspaceId: string,
   targetUserId: string,
   updates: WorkspaceMembersPatchInput,
 ) => {
   assertIsAdmin(requesterRole);
 
+  if (requesterId === targetUserId) {
+    throw new ForbiddenError("You cannot change your own membership role");
+  }
+
+  const membership = await WorkspaceMember.findOneAndUpdate(
+    { workspaceId, userId: targetUserId },
+    { $set: updates },
+    { new: true, runValidators: true },
+  ).populate<{ userId: { username: string; email: string } }>(
+    "userId",
+    "username email",
+  );
+
+  if (!membership) {
+    throw new AppError("Member not found", 404);
+  }
+
   return {
-    id: targetUserId,
+    id: membership.id,
     workspaceId,
-    email: "stub-member@example.com",
-    role: updates.role,
+    userId: targetUserId,
+    username: membership.userId.username,
+    email: membership.userId.email,
+    role: membership.role,
   };
 };
 
 export const deleteWorkspaceMembersByIdService = async (
   requesterRole: "admin" | "member",
+  requesterId: string,
   workspaceId: string,
   targetUserId: string,
 ) => {
   assertIsAdmin(requesterRole);
+
+  if (requesterId === targetUserId) {
+    throw new ForbiddenError("You cannot remove yourself from the workspace");
+  }
+
+  const membership = await WorkspaceMember.findOneAndDelete({
+    workspaceId,
+    userId: targetUserId,
+  });
+
+  if (!membership) {
+    throw new AppError("Member not found", 404);
+  }
+
   return;
 };

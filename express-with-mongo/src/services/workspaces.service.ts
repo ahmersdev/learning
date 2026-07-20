@@ -4,6 +4,7 @@ import type {
 } from "../schemas/workspaces.schema.ts";
 import { Workspace } from "../models/workspace.model.ts";
 import { AppError } from "../utils/app-errors.ts";
+import { WorkspaceMember } from "../models/workspace-member.model.ts";
 
 export const postWorkspaceService = async (
   ownerId: string,
@@ -15,6 +16,12 @@ export const postWorkspaceService = async (
     ownerId,
     name,
     description: description ?? null,
+  });
+
+  await WorkspaceMember.create({
+    workspaceId: workspace.id,
+    userId: ownerId,
+    role: "admin",
   });
 
   return {

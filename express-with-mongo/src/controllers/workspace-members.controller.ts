@@ -94,6 +94,7 @@ export const patchWorkspaceMembersById = async (
 
     const member = await patchWorkspaceMembersByIdService(
       requesterRole,
+      req.user.id,
       workspaceId,
       userId,
       req.body,
@@ -125,7 +126,12 @@ export const deleteWorkspaceMembersById = async (
       req.user.id,
     );
 
-    await deleteWorkspaceMembersByIdService(requesterRole, workspaceId, userId);
+    await deleteWorkspaceMembersByIdService(
+      requesterRole,
+      req.user.id,
+      workspaceId,
+      userId,
+    );
 
     return res.status(200).json({
       status: "success",
