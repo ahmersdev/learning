@@ -4,8 +4,10 @@ import {
   signinService,
   refreshSessionService,
   signoutService,
+  changePasswordService,
 } from "../services/auth.service.ts";
 import type {
+  ChangePasswordInput,
   SigninInputSchema,
   SignupInputSchema,
 } from "../schemas/auth.schema.ts";
@@ -128,6 +130,31 @@ export const signout = async (
     return res
       .status(200)
       .json({ status: "success", message: "Logged out successfully" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const changePassword = async (
+  req: Request<{}, {}, ChangePasswordInput>,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (!req.user) {
+      throw new AppError("Unauthorized", 401);
+    }
+
+    await changePasswordService(
+      req.user.id,
+      req.body.currentPassword,
+      req.body.newPassword,
+    );
+
+    return res.status(200).json({
+      status: "success",
+      message: "Password changed successfully",
+    });
   } catch (error) {
     next(error);
   }

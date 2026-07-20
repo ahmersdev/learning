@@ -28,7 +28,7 @@ export const postWorkspaceMembers = async (
       req.user.id,
     );
 
-    const member = await postWorkspaceMembersService(
+    const result = await postWorkspaceMembersService(
       requesterRole,
       workspaceId,
       req.body,
@@ -37,7 +37,7 @@ export const postWorkspaceMembers = async (
     return res.status(201).json({
       status: "success",
       message: "Member added successfully",
-      data: { member },
+      data: result,
     });
   } catch (error) {
     next(error);

@@ -9,6 +9,7 @@ export interface IUser extends Document {
   email: string;
   password: string;
   role: UserRole;
+  mustChangePassword: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -44,8 +45,10 @@ const userSchema = new Schema<IUser>(
       type: String,
       enum: userRoles,
       default: "admin",
-      // No `select: false` here — role needs to be readable normally,
-      // unlike password. It's just not writable via any Zod schema.
+    },
+    mustChangePassword: {
+      type: Boolean,
+      default: false,
     },
   },
   { timestamps: true },

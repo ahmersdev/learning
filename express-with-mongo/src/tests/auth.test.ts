@@ -136,6 +136,18 @@ describe("Auth routes", () => {
       expect(res.status).toBe(401);
     });
 
+    it("returns mustChangePassword on signin", async () => {
+      await request(app).post("/api/v1/auth/signup").send(testUser);
+
+      const res = await request(app).post("/api/v1/auth/signin").send({
+        email: testUser.email,
+        password: testUser.password,
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.user.mustChangePassword).toBe(false);
+    });
+
     it("creates a separate session on each signin (multi-device)", async () => {
       await request(app).post("/api/v1/auth/signup").send(testUser);
 
@@ -274,6 +286,92 @@ describe("Auth routes", () => {
         .set("Cookie", [cookie]);
 
       expect(refreshRes.status).toBe(401);
+    });
+  });
+
+  describe("PATCH /api/v1/auth/change-password", () => {
+    it("returns 401 with no access token", async () => {
+      const res = await request(app)
+        .patch("/api/v1/auth/change-password")
+        .send({
+          currentPassword: testUser.password,
+          newPassword: "NewPassword1!",
+        });
+
+      expect(res.status).toBe(401);
+    });
+
+    it("returns 400 when newPassword fails complexity rules", async () => {
+      const signupRes = await request(app)
+        .post("/api/v1/auth/signup")
+        .send(testUser);
+
+      const res = await request(app)
+        .patch("/api/v1/auth/change-password")
+        .set("Authorization", `Bearer ${signupRes.body.data.accessToken}`)
+        .send({ currentPassword: testUser.password, newPassword: "weak" });
+
+      expect(res.status).toBe(400);
+    });
+
+    it("returns 400 when newPassword is the same as currentPassword", async () => {
+      const signupRes = await request(app)
+        .post("/api/v1/auth/signup")
+        .send(testUser);
+
+      const res = await request(app)
+        .patch("/api/v1/auth/change-password")
+        .set("Authorization", `Bearer ${signupRes.body.data.accessToken}`)
+        .send({
+          currentPassword: testUser.password,
+          newPassword: testUser.password,
+        });
+
+      expect(res.status).toBe(400);
+    });
+
+    it("returns 401 when currentPassword is wrong", async () => {
+      const signupRes = await request(app)
+        .post("/api/v1/auth/signup")
+        .send(testUser);
+
+      const res = await request(app)
+        .patch("/api/v1/auth/change-password")
+        .set("Authorization", `Bearer ${signupRes.body.data.accessToken}`)
+        .send({
+          currentPassword: "WrongPassword1!",
+          newPassword: "NewPassword1!",
+        });
+
+      expect(res.status).toBe(401);
+    });
+
+    it("changes the password and allows signin with the new one", async () => {
+      const signupRes = await request(app)
+        .post("/api/v1/auth/signup")
+        .send(testUser);
+
+      const changeRes = await request(app)
+        .patch("/api/v1/auth/change-password")
+        .set("Authorization", `Bearer ${signupRes.body.data.accessToken}`)
+        .send({
+          currentPassword: testUser.password,
+          newPassword: "NewPassword1!",
+        });
+
+      expect(changeRes.status).toBe(200);
+
+      const oldSignin = await request(app).post("/api/v1/auth/signin").send({
+        email: testUser.email,
+        password: testUser.password,
+      });
+      expect(oldSignin.status).toBe(401);
+
+      const newSignin = await request(app).post("/api/v1/auth/signin").send({
+        email: testUser.email,
+        password: "NewPassword1!",
+      });
+      expect(newSignin.status).toBe(200);
     });
   });
 });

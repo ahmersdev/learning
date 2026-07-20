@@ -1,16 +1,22 @@
 import { Router } from "express";
 import {
+  changePassword,
   refresh,
   signin,
   signout,
   signup,
 } from "../controllers/auth.controller.ts";
 import { validate } from "../middlewares/validate.middleware.ts";
-import { signinSchema, signupSchema } from "../schemas/auth.schema.ts";
+import {
+  changePasswordSchema,
+  signinSchema,
+  signupSchema,
+} from "../schemas/auth.schema.ts";
 import {
   authLimiter,
   refreshLimiter,
 } from "../middlewares/rate-limiter.middleware.ts";
+import { requireAuth } from "../middlewares/auth.middleware.ts";
 
 const router = Router();
 
@@ -90,5 +96,39 @@ router.post("/refresh", refreshLimiter, refresh);
  *         description: Logged out successfully
  */
 router.post("/signout", signout);
+
+/**
+ * @openapi
+ * /auth/change-password:
+ *   patch:
+ *     summary: Change your own password (also clears mustChangePassword)
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [currentPassword, newPassword]
+ *             properties:
+ *               currentPassword: { type: string }
+ *               newPassword: { type: string, example: "NewPassword1!" }
+ *     responses:
+ *       200:
+ *         description: Password changed successfully
+ *       400:
+ *         description: Validation failed
+ *       401:
+ *         description: Unauthorized, or current password is incorrect
+ */
+router.patch(
+  "/change-password",
+  requireAuth,
+  authLimiter,
+  validate(changePasswordSchema),
+  changePassword,
+);
 
 export default router;

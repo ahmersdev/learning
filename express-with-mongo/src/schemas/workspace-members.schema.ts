@@ -4,6 +4,7 @@ const workspaceRoles = ["admin", "member"] as const;
 
 export const workspaceMembersPostSchema = z
   .object({
+    fullName: z.string().trim().min(1, "fullName is required").optional(),
     email: z
       .string()
       .trim()

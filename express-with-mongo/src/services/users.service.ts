@@ -38,6 +38,7 @@ export const getUserService = async (userId: string) => {
     username: user.username,
     email: user.email,
     role: user.role,
+    mustChangePassword: user.mustChangePassword,
   };
 };
 

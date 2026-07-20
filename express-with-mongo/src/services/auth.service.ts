@@ -145,7 +145,12 @@ export const signinService = async (
   );
 
   return {
-    user: { username: user.username, email: user.email, role: user.role },
+    user: {
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      mustChangePassword: user.mustChangePassword,
+    },
     accessToken,
     refreshToken,
   };
@@ -182,4 +187,25 @@ export const refreshSessionService = async (
 export const signoutService = async (sessionId: string | undefined) => {
   if (!sessionId) return;
   await Session.findByIdAndDelete(sessionId);
+};
+
+export const changePasswordService = async (
+  userId: string,
+  currentPassword: string,
+  newPassword: string,
+) => {
+  const user = await User.findById(userId).select("+password");
+
+  if (!user) {
+    throw new AppError("User not found", 404);
+  }
+
+  const isMatch = await bcrypt.compare(currentPassword, user.password);
+  if (!isMatch) {
+    throw new AppError("Current password is incorrect", 401);
+  }
+
+  user.password = await bcrypt.hash(newPassword, SALT_ROUNDS);
+  user.mustChangePassword = false;
+  await user.save();
 };

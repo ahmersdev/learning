@@ -43,5 +43,26 @@ export const signinSchema = z
     path: ["username"],
   });
 
+export const changePasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "currentPassword is required"),
+    newPassword: z
+      .string()
+      .min(8, "Password must be at least 8 characters long")
+      .regex(/[a-z]/, "Password must contain at least one lowercase letter")
+      .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+      .regex(/[0-9]/, "Password must contain at least one number")
+      .regex(
+        /[^a-zA-Z0-9]/,
+        "Password must contain at least one special character",
+      ),
+  })
+  .strict()
+  .refine((data) => data.currentPassword !== data.newPassword, {
+    message: "New password must be different from the current password",
+    path: ["newPassword"],
+  });
+
 export type SignupInputSchema = z.infer<typeof signupSchema>;
 export type SigninInputSchema = z.infer<typeof signinSchema>;
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
