@@ -1,22 +1,23 @@
-import crypto from "crypto";
 import type {
   ProjectPostInput,
   ProjectPatchInput,
 } from "../schemas/projects.schema.ts";
 import { AppError } from "../utils/app-errors.ts";
+import { Project } from "../models/project.model.ts";
+import { WorkspaceMember } from "../models/workspace-member.model.ts";
 
-// TODO: once DB is wired up:
-// - assertIsWorkspaceMember should verify the user actually belongs to this
-//   workspace (throw AppError 404 "Workspace not found" if not — avoids
-//   leaking existence of workspaces the user isn't part of)
-// - all functions should perform real queries/writes scoped to workspaceId
-
+// Any member (admin or regular) can access a workspace's projects — this
+// mirrors getRequesterRoleService's "404 not 403" pattern: a workspace you
+// don't belong to looks identical to one that doesn't exist at all
 export const assertIsWorkspaceMember = async (
   workspaceId: string,
   userId: string,
 ): Promise<void> => {
-  // TODO: check membership; for now stub every requester as a valid member
-  return;
+  const membership = await WorkspaceMember.findOne({ workspaceId, userId });
+
+  if (!membership) {
+    throw new AppError("Workspace not found", 404);
+  }
 };
 
 export const postProjectService = async (
@@ -25,38 +26,46 @@ export const postProjectService = async (
 ) => {
   const { name, description } = projectData;
 
-  return {
-    id: crypto.randomUUID(),
+  const project = await Project.create({
     workspaceId,
     name,
     description: description ?? null,
+  });
+
+  return {
+    id: project.id,
+    workspaceId: project.workspaceId.toString(),
+    name: project.name,
+    description: project.description,
   };
 };
 
 export const getProjectsService = async (workspaceId: string) => {
-  // TODO: return all projects where workspaceId matches
-  return [
-    {
-      id: crypto.randomUUID(),
-      workspaceId,
-      name: "Stub Project",
-      description: null,
-    },
-  ];
+  const projects = await Project.find({ workspaceId });
+
+  return projects.map((project) => ({
+    id: project.id,
+    workspaceId: project.workspaceId.toString(),
+    name: project.name,
+    description: project.description,
+  }));
 };
 
 export const getProjectByIdService = async (
   workspaceId: string,
   projectId: string,
 ) => {
-  // TODO: find project by id -> if not found OR not in this workspace,
-  // throw new AppError("Project not found", 404)
+  const project = await Project.findOne({ _id: projectId, workspaceId });
+
+  if (!project) {
+    throw new AppError("Project not found", 404);
+  }
 
   return {
-    id: projectId,
-    workspaceId,
-    name: "Stub Project",
-    description: null,
+    id: project.id,
+    workspaceId: project.workspaceId.toString(),
+    name: project.name,
+    description: project.description,
   };
 };
 
@@ -65,15 +74,21 @@ export const patchProjectByIdService = async (
   projectId: string,
   updates: ProjectPatchInput,
 ) => {
-  // TODO: find project by id -> if not found OR not in this workspace,
-  // throw new AppError("Project not found", 404)
-  // apply updates, save
+  const project = await Project.findOneAndUpdate(
+    { _id: projectId, workspaceId },
+    { $set: updates },
+    { new: true, runValidators: true },
+  );
+
+  if (!project) {
+    throw new AppError("Project not found", 404);
+  }
 
   return {
-    id: projectId,
-    workspaceId,
-    name: updates.name ?? "Stub Project",
-    description: updates.description ?? null,
+    id: project.id,
+    workspaceId: project.workspaceId.toString(),
+    name: project.name,
+    description: project.description,
   };
 };
 
@@ -81,9 +96,14 @@ export const deleteProjectByIdService = async (
   workspaceId: string,
   projectId: string,
 ) => {
-  // TODO: find project by id -> if not found OR not in this workspace,
-  // throw new AppError("Project not found", 404)
-  // delete from DB
+  const project = await Project.findOneAndDelete({
+    _id: projectId,
+    workspaceId,
+  });
+
+  if (!project) {
+    throw new AppError("Project not found", 404);
+  }
 
   return;
 };

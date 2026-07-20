@@ -13,6 +13,7 @@ import {
   workspaceMembersPatchSchema,
   workspaceMembersPostSchema,
 } from "../schemas/workspace-members.schema.ts";
+import { validateObjectId } from "../middlewares/validate-object-id.middleware.ts";
 
 const router = Router();
 
@@ -54,6 +55,7 @@ const router = Router();
 router.post(
   "/:workspaceId/members",
   requireAuth,
+  validateObjectId("workspaceId"),
   generalLimiter,
   validate(workspaceMembersPostSchema),
   postWorkspaceMembers,
@@ -83,6 +85,7 @@ router.post(
 router.get(
   "/:workspaceId/members",
   requireAuth,
+  validateObjectId("workspaceId"),
   generalLimiter,
   getWorkspaceMembers,
 );
@@ -127,6 +130,7 @@ router.get(
 router.patch(
   "/:workspaceId/members/:userId",
   requireAuth,
+  validateObjectId("workspaceId", "userId"),
   generalLimiter,
   validate(workspaceMembersPatchSchema),
   patchWorkspaceMembersById,
@@ -162,6 +166,7 @@ router.patch(
 router.delete(
   "/:workspaceId/members/:userId",
   requireAuth,
+  validateObjectId("workspaceId", "userId"),
   generalLimiter,
   deleteWorkspaceMembersById,
 );
@@ -196,6 +201,7 @@ router.delete(
 router.post(
   "/:workspaceId/members/:userId/reset-password",
   requireAuth,
+  validateObjectId("workspaceId", "userId"),
   generalLimiter,
   resetMemberPassword,
 );

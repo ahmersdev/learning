@@ -14,6 +14,7 @@ import {
   workspacePatchSchema,
   workspacePostSchema,
 } from "../schemas/workspaces.schema.ts";
+import { validateObjectId } from "../middlewares/validate-object-id.middleware.ts";
 
 const router = Router();
 
@@ -100,6 +101,7 @@ router.get(
   "/:workspaceId",
   requireAuth,
   requireAdmin,
+  validateObjectId("workspaceId"),
   generalLimiter,
   getWorkspaceById,
 );
@@ -144,6 +146,7 @@ router.patch(
   "/:workspaceId",
   requireAuth,
   requireAdmin,
+  validateObjectId("workspaceId"),
   generalLimiter,
   validate(workspacePatchSchema),
   patchWorkspaceById,
@@ -177,6 +180,7 @@ router.delete(
   "/:workspaceId",
   requireAuth,
   requireAdmin,
+  validateObjectId("workspaceId"),
   generalLimiter,
   deleteWorkspaceById,
 );
