@@ -13,8 +13,8 @@ const isDuplicateKeyError = (
   );
 };
 
-export const getAllUsersService = async () => {
-  const users = await User.find();
+export const getAllUsersService = async (currentUserId: string) => {
+  const users = await User.find({ _id: { $ne: currentUserId } });
 
   return users.map((user) => ({
     id: user.id,

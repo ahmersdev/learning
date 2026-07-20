@@ -8,12 +8,17 @@ import {
 } from "../services/users.service.ts";
 
 export const getAllUsers = async (
-  _req: Request,
+  req: Request,
   res: Response,
   next: NextFunction,
 ) => {
   try {
-    const users = await getAllUsersService();
+    if (!req.user) {
+      throw new AppError("Unauthorized", 401);
+    }
+
+    const currentUserId = req.user.id;
+    const users = await getAllUsersService(currentUserId);
 
     return res.status(200).json({
       status: "success",

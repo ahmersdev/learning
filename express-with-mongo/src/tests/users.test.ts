@@ -226,19 +226,22 @@ describe("User routes", () => {
       expect(res.status).toBe(403);
     });
 
-    it("returns the full user list for an admin, including role", async () => {
-      const accessToken = await signupAndGetToken();
-      await signupAndGetToken(otherUser);
+    it("returns the list of other users for an admin, excluding the requesting admin", async () => {
+      const adminToken = await signupAndGetToken(); // Creates testUser (the requesting admin)
+      await signupAndGetToken(otherUser); // Creates otherUser
 
       const res = await request(app)
         .get("/api/v1/users")
-        .set("Authorization", `Bearer ${accessToken}`);
+        .set("Authorization", `Bearer ${adminToken}`);
 
       expect(res.status).toBe(200);
-      expect(res.body.data.users).toHaveLength(2);
-      expect(
-        res.body.data.users.every((u: { role: string }) => u.role === "admin"),
-      ).toBe(true);
+
+      // Length is 1 because testUser (admin) is excluded from the list
+      expect(res.body.data.users).toHaveLength(1);
+
+      // Verify the returned user is indeed otherUser and not testUser
+      expect(res.body.data.users[0].username).toBe(otherUser.username);
+      expect(res.body.data.users[0].role).toBe("admin");
     });
   });
 });
