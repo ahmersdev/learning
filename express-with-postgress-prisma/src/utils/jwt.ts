@@ -18,6 +18,9 @@ const REFRESH_EXPIRY = (process.env.JWT_REFRESH_EXPIRY ||
 export interface AccessTokenPayload {
   userId: string;
   email: string;
+  username: string;
+  fullName: string;
+  role: string;
 }
 
 export interface RefreshTokenPayload {

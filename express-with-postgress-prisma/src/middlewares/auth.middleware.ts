@@ -9,6 +9,9 @@ declare global {
       user?: {
         id: string;
         email: string;
+        username: string;
+        fullName: string;
+        role: string;
       };
     }
   }
@@ -37,6 +40,9 @@ export const requireAuth = (
     req.user = {
       id: decoded.userId,
       email: decoded.email,
+      username: decoded.username,
+      fullName: decoded.fullName,
+      role: decoded.role,
     };
 
     next();

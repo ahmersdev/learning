@@ -16,8 +16,13 @@ import { Prisma } from "../../generated/prisma/client.ts";
 const SALT_ROUNDS = 10;
 
 const createSessionAndTokens = async (
-  userId: string,
-  email: string,
+  user: {
+    id: string;
+    email: string;
+    username: string;
+    fullName: string;
+    role: string;
+  },
   deviceInfo?: string,
 ) => {
   const tokenId = crypto.randomUUID();
@@ -25,14 +30,25 @@ const createSessionAndTokens = async (
   await prisma.session.create({
     data: {
       tokenId,
-      userId,
+      userId: user.id,
       deviceInfo,
       expiresAt: new Date(Date.now() + REFRESH_EXPIRY_MS),
     },
   });
 
-  const accessToken = generateAccessToken({ userId, email });
-  const refreshToken = generateRefreshToken({ userId, email, tokenId });
+  const accessToken = generateAccessToken({
+    userId: user.id,
+    email: user.email,
+    username: user.username,
+    fullName: user.fullName,
+    role: user.role,
+  });
+
+  const refreshToken = generateRefreshToken({
+    userId: user.id,
+    email: user.email,
+    tokenId,
+  });
 
   return { accessToken, refreshToken };
 };
@@ -76,8 +92,7 @@ export const createUserService = async (
   }
 
   const { accessToken, refreshToken } = await createSessionAndTokens(
-    user.id,
-    user.email,
+    user,
     deviceInfo,
   );
 
@@ -113,8 +128,7 @@ export const signinService = async (
   }
 
   const { accessToken, refreshToken } = await createSessionAndTokens(
-    user.id,
-    user.email,
+    user,
     deviceInfo,
   );
 
@@ -138,6 +152,9 @@ export const refreshSessionService = async (tokenId: string) => {
   return generateAccessToken({
     userId: session.user.id,
     email: session.user.email,
+    username: session.user.username,
+    fullName: session.user.fullName,
+    role: session.user.role,
   });
 };
 
