@@ -66,6 +66,59 @@ describe("Task routes", () => {
       expect(res.status).toBe(400);
     });
 
+    it("returns 400 when assigneeId is not a member of the workspace", async () => {
+      const { accessToken, projectId } = await createProjectAsAdmin();
+      const outsiderToken = await signupAndGetToken();
+
+      const outsiderMeRes = await request(app)
+        .get("/api/v1/users/me")
+        .set("Authorization", `Bearer ${outsiderToken}`);
+
+      const res = await request(app)
+        .post(`/api/v1/projects/${projectId}/tasks`)
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({
+          title: "Task",
+          assigneeId: outsiderMeRes.body.data.user.id,
+        });
+
+      expect(res.status).toBe(400);
+    });
+
+    it("creates a task with a valid assignee and returns assigneeDetails", async () => {
+      const { accessToken, projectId } = await createProjectAsAdmin();
+
+      const meRes = await request(app)
+        .get("/api/v1/users/me")
+        .set("Authorization", `Bearer ${accessToken}`);
+
+      const res = await request(app)
+        .post(`/api/v1/projects/${projectId}/tasks`)
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({ title: "Assigned Task", assigneeId: meRes.body.data.user.id });
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.task.assigneeDetails).toBeDefined();
+      expect(res.body.data.task.assigneeDetails.id).toBe(
+        meRes.body.data.user.id,
+      );
+      expect(res.body.data.task.assigneeDetails.username).toBe(
+        meRes.body.data.user.username,
+      );
+    });
+
+    it("returns assigneeDetails as null when no assignee is set", async () => {
+      const { accessToken, projectId } = await createProjectAsAdmin();
+
+      const res = await request(app)
+        .post(`/api/v1/projects/${projectId}/tasks`)
+        .set("Authorization", `Bearer ${accessToken}`)
+        .send({ title: "Unassigned Task" });
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.task.assigneeDetails).toBeNull();
+    });
+
     it("returns 404 when the project doesn't exist", async () => {
       const accessToken = await signupAndGetToken();
 

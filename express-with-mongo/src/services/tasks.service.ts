@@ -3,16 +3,11 @@ import type {
   TaskPatchInput,
   TaskQueryInput,
 } from "../schemas/tasks.schema.ts";
-import { AppError } from "../utils/app-errors.ts";
-import { Task } from "../models/task.model.ts";
+import { AppError, BadRequestError } from "../utils/app-errors.ts";
+import { Task, type ITask } from "../models/task.model.ts";
 import { Project } from "../models/project.model.ts";
 import { WorkspaceMember } from "../models/workspace-member.model.ts";
 
-// A task's parent chain is Task -> Project -> Workspace. To confirm access
-// we resolve the project first (to get its workspaceId), then check
-// membership in that workspace — same "404 not 403" leak-avoidance used
-// throughout: a project that exists but you can't access looks identical
-// to one that doesn't exist
 export const assertCanAccessProject = async (
   projectId: string,
   userId: string,
@@ -33,17 +28,68 @@ export const assertCanAccessProject = async (
   }
 };
 
-const toTaskResponse = (task: InstanceType<typeof Task>) => ({
-  id: task.id,
-  projectId: task.projectId.toString(),
-  title: task.title,
-  description: task.description,
-  status: task.status,
-  priority: task.priority,
-  dueDate: task.dueDate ? task.dueDate.toISOString() : null,
-  assigneeId: task.assigneeId ? task.assigneeId.toString() : null,
-  createdAt: task.createdAt.toISOString(),
-});
+const assertValidAssignee = async (
+  projectId: string,
+  assigneeId: string,
+): Promise<void> => {
+  const project = await Project.findById(projectId);
+
+  if (!project) {
+    throw new AppError("Project not found", 404);
+  }
+
+  const membership = await WorkspaceMember.findOne({
+    workspaceId: project.workspaceId,
+    userId: assigneeId,
+  });
+
+  if (!membership) {
+    throw new BadRequestError(
+      "assigneeId must belong to a member of this task's workspace",
+    );
+  }
+};
+
+interface PopulatedAssignee {
+  _id: { toString(): string };
+  fullName: string;
+  username: string;
+  email: string;
+}
+
+// Represents a Task document *after* populate() has swapped assigneeId
+// from a raw ObjectId to a full user object. Mongoose's static Document
+// type can't express this transformation on its own, so this is the
+// shape toTaskResponse actually expects, and callers cast to it.
+type PopulatedTask = Omit<ITask, "assigneeId"> & {
+  id: string;
+  assigneeId: PopulatedAssignee | null;
+};
+
+const toTaskResponse = (task: PopulatedTask) => {
+  const assignee = task.assigneeId;
+
+  return {
+    id: task.id,
+    projectId: task.projectId.toString(),
+    title: task.title,
+    description: task.description,
+    status: task.status,
+    priority: task.priority,
+    dueDate: task.dueDate ? task.dueDate.toISOString() : null,
+    assigneeDetails: assignee
+      ? {
+          id: assignee._id.toString(),
+          fullName: assignee.fullName,
+          username: assignee.username,
+          email: assignee.email,
+        }
+      : null,
+    createdAt: task.createdAt.toISOString(),
+  };
+};
+
+const ASSIGNEE_POPULATE_FIELDS = "fullName username email";
 
 export const postTaskService = async (
   projectId: string,
@@ -51,6 +97,10 @@ export const postTaskService = async (
 ) => {
   const { title, description, status, priority, dueDate, assigneeId } =
     taskData;
+
+  if (assigneeId) {
+    await assertValidAssignee(projectId, assigneeId);
+  }
 
   const task = await Task.create({
     projectId,
@@ -62,7 +112,9 @@ export const postTaskService = async (
     assigneeId: assigneeId ?? null,
   });
 
-  return toTaskResponse(task);
+  await task.populate("assigneeId", ASSIGNEE_POPULATE_FIELDS);
+
+  return toTaskResponse(task as unknown as PopulatedTask);
 };
 
 export const getTasksService = async (
@@ -77,17 +129,21 @@ export const getTasksService = async (
 
   const sort: Record<string, 1 | -1> = query.sortBy
     ? { [query.sortBy]: query.sortOrder === "desc" ? -1 : 1 }
-    : { createdAt: -1 }; // sensible default: newest first
+    : { createdAt: -1 };
 
   const skip = (query.page - 1) * query.limit;
 
   const [tasks, total] = await Promise.all([
-    Task.find(filter).sort(sort).skip(skip).limit(query.limit),
+    Task.find(filter)
+      .sort(sort)
+      .skip(skip)
+      .limit(query.limit)
+      .populate("assigneeId", ASSIGNEE_POPULATE_FIELDS),
     Task.countDocuments(filter),
   ]);
 
   return {
-    tasks: tasks.map(toTaskResponse),
+    tasks: (tasks as unknown as PopulatedTask[]).map(toTaskResponse),
     pagination: {
       page: query.page,
       limit: query.limit,
@@ -98,13 +154,16 @@ export const getTasksService = async (
 };
 
 export const getTaskByIdService = async (projectId: string, taskId: string) => {
-  const task = await Task.findOne({ _id: taskId, projectId });
+  const task = await Task.findOne({ _id: taskId, projectId }).populate(
+    "assigneeId",
+    ASSIGNEE_POPULATE_FIELDS,
+  );
 
   if (!task) {
     throw new AppError("Task not found", 404);
   }
 
-  return toTaskResponse(task);
+  return toTaskResponse(task as unknown as PopulatedTask);
 };
 
 export const patchTaskByIdService = async (
@@ -112,17 +171,21 @@ export const patchTaskByIdService = async (
   taskId: string,
   updates: TaskPatchInput,
 ) => {
+  if (updates.assigneeId) {
+    await assertValidAssignee(projectId, updates.assigneeId);
+  }
+
   const task = await Task.findOneAndUpdate(
     { _id: taskId, projectId },
     { $set: updates },
     { new: true, runValidators: true },
-  );
+  ).populate("assigneeId", ASSIGNEE_POPULATE_FIELDS);
 
   if (!task) {
     throw new AppError("Task not found", 404);
   }
 
-  return toTaskResponse(task);
+  return toTaskResponse(task as unknown as PopulatedTask);
 };
 
 export const deleteTaskByIdService = async (
