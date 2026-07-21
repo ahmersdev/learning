@@ -12,36 +12,38 @@ const SIGNIN_EMAIL = "signin-test@example.com";
 const SIGNIN_USERNAME = "signintestuser";
 const SIGNIN_PASSWORD = "Password1!";
 
-describe("Auth routes", () => {
-  beforeAll(async () => {
-    await prisma.user.deleteMany({
-      where: {
-        OR: [
-          { email: SIGNUP_EMAIL },
-          { username: SIGNUP_USERNAME },
-          { email: SIGNIN_EMAIL },
-          { username: SIGNIN_USERNAME },
-        ],
-      },
-    });
+const REFRESH_EMAIL = "refresh-test@example.com";
+const REFRESH_USERNAME = "refreshtestuser";
+
+const SIGNOUT_EMAIL = "signout-test@example.com";
+const SIGNOUT_USERNAME = "signouttestuser";
+
+// deleting these users cascades and deletes their sessions too
+const ALL_EMAILS = [SIGNUP_EMAIL, SIGNIN_EMAIL, REFRESH_EMAIL, SIGNOUT_EMAIL];
+const ALL_USERNAMES = [
+  SIGNUP_USERNAME,
+  SIGNIN_USERNAME,
+  REFRESH_USERNAME,
+  SIGNOUT_USERNAME,
+];
+
+const cleanup = () =>
+  prisma.user.deleteMany({
+    where: {
+      OR: [{ email: { in: ALL_EMAILS } }, { username: { in: ALL_USERNAMES } }],
+    },
   });
 
+describe("Auth routes", () => {
+  beforeAll(cleanup);
+
   afterAll(async () => {
-    await prisma.user.deleteMany({
-      where: {
-        OR: [
-          { email: SIGNUP_EMAIL },
-          { username: SIGNUP_USERNAME },
-          { email: SIGNIN_EMAIL },
-          { username: SIGNIN_USERNAME },
-        ],
-      },
-    });
+    await cleanup();
     await prisma.$disconnect();
   });
 
   describe("POST /api/v1/auth/signup", () => {
-    it("registers a user with valid data and sets refreshToken cookie", async () => {
+    it("registers a user, sets refreshToken cookie, and creates a session", async () => {
       const res = await request(app).post("/api/v1/auth/signup").send({
         fullName: "Signup Test",
         username: SIGNUP_USERNAME,
@@ -51,7 +53,20 @@ describe("Auth routes", () => {
 
       expect(res.status).toBe(201);
       expect(res.body.data.accessToken).toBeDefined();
-      expect(res.headers["set-cookie"]?.[0]).toMatch(/refreshToken=/);
+
+      const cookie = res.headers["set-cookie"]?.[0];
+      expect(cookie).toMatch(/refreshToken=/);
+
+      const refreshToken = cookie!.split("refreshToken=")[1]!.split(";")[0]!;
+      const decoded = jwt.verify(
+        refreshToken,
+        process.env.JWT_REFRESH_SECRET!,
+      ) as { tokenId: string };
+
+      const session = await prisma.session.findUnique({
+        where: { tokenId: decoded.tokenId },
+      });
+      expect(session).not.toBeNull();
     });
 
     it("rejects weak password", async () => {
@@ -67,7 +82,6 @@ describe("Auth routes", () => {
     });
 
     it("rejects duplicate email/username with 409", async () => {
-      // reuses the user created in the first test above
       const res = await request(app).post("/api/v1/auth/signup").send({
         fullName: "Signup Test",
         username: SIGNUP_USERNAME,
@@ -94,7 +108,7 @@ describe("Auth routes", () => {
       });
     });
 
-    it("signs in and sets refreshToken cookie", async () => {
+    it("signs in, sets refreshToken cookie, and creates a session", async () => {
       const res = await request(app).post("/api/v1/auth/signin").send({
         email: SIGNIN_EMAIL,
         password: SIGNIN_PASSWORD,
@@ -102,7 +116,20 @@ describe("Auth routes", () => {
 
       expect(res.status).toBe(200);
       expect(res.body.data.accessToken).toBeDefined();
-      expect(res.headers["set-cookie"]?.[0]).toMatch(/refreshToken=/);
+
+      const cookie = res.headers["set-cookie"]?.[0];
+      expect(cookie).toMatch(/refreshToken=/);
+
+      const refreshToken = cookie!.split("refreshToken=")[1]!.split(";")[0]!;
+      const decoded = jwt.verify(
+        refreshToken,
+        process.env.JWT_REFRESH_SECRET!,
+      ) as { tokenId: string };
+
+      const session = await prisma.session.findUnique({
+        where: { tokenId: decoded.tokenId },
+      });
+      expect(session).not.toBeNull();
     });
 
     it("rejects wrong password with 401", async () => {
@@ -124,6 +151,22 @@ describe("Auth routes", () => {
   });
 
   describe("POST /api/v1/auth/refresh", () => {
+    let userId: string;
+
+    beforeAll(async () => {
+      const user = await prisma.user.create({
+        data: {
+          fullName: "Refresh Test",
+          username: REFRESH_USERNAME,
+          email: REFRESH_EMAIL,
+          password: await bcrypt.hash("Password1!", 10),
+          role: "user",
+          mustChangePassword: false,
+        },
+      });
+      userId = user.id;
+    });
+
     it("returns 401 with no refresh token cookie", async () => {
       const res = await request(app).post("/api/v1/auth/refresh");
       expect(res.status).toBe(401);
@@ -131,7 +174,7 @@ describe("Auth routes", () => {
 
     it("returns 401 with an expired refresh token", async () => {
       const expiredToken = jwt.sign(
-        { userId: "abc", email: "test@example.com" },
+        { userId, email: REFRESH_EMAIL, tokenId: crypto.randomUUID() },
         process.env.JWT_REFRESH_SECRET!,
         { expiresIn: "-1s" },
       );
@@ -143,9 +186,46 @@ describe("Auth routes", () => {
       expect(res.status).toBe(401);
     });
 
-    it("returns a new access token with a valid refresh token", async () => {
+    it("returns 401 when the session has been revoked (e.g. deleted from DB)", async () => {
+      const tokenId = crypto.randomUUID();
+
+      await prisma.session.create({
+        data: {
+          tokenId,
+          userId,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        },
+      });
+
+      // simulate the session being revoked/deleted server-side
+      await prisma.session.delete({ where: { tokenId } });
+
+      const validSignatureToken = jwt.sign(
+        { userId, email: REFRESH_EMAIL, tokenId },
+        process.env.JWT_REFRESH_SECRET!,
+        { expiresIn: "7d" },
+      );
+
+      const res = await request(app)
+        .post("/api/v1/auth/refresh")
+        .set("Cookie", [`refreshToken=${validSignatureToken}`]);
+
+      expect(res.status).toBe(401);
+    });
+
+    it("returns a new access token when the session is valid", async () => {
+      const tokenId = crypto.randomUUID();
+
+      await prisma.session.create({
+        data: {
+          tokenId,
+          userId,
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        },
+      });
+
       const validToken = jwt.sign(
-        { userId: "abc", email: "test@example.com" },
+        { userId, email: REFRESH_EMAIL, tokenId },
         process.env.JWT_REFRESH_SECRET!,
         { expiresIn: "7d" },
       );
@@ -160,7 +240,35 @@ describe("Auth routes", () => {
   });
 
   describe("POST /api/v1/auth/signout", () => {
-    it("clears the refreshToken cookie", async () => {
+    it("clears the refreshToken cookie and deletes the session", async () => {
+      const signinRes = await request(app).post("/api/v1/auth/signup").send({
+        fullName: "Signout Test",
+        username: SIGNOUT_USERNAME,
+        email: SIGNOUT_EMAIL,
+        password: "Password1!",
+      });
+
+      const cookie = signinRes.headers["set-cookie"]?.[0]!;
+      const refreshToken = cookie.split("refreshToken=")[1]!.split(";")[0]!;
+      const decoded = jwt.verify(
+        refreshToken,
+        process.env.JWT_REFRESH_SECRET!,
+      ) as { tokenId: string };
+
+      const res = await request(app)
+        .post("/api/v1/auth/signout")
+        .set("Cookie", [`refreshToken=${refreshToken}`]);
+
+      expect(res.status).toBe(200);
+      expect(res.headers["set-cookie"]?.[0]).toMatch(/refreshToken=;/);
+
+      const session = await prisma.session.findUnique({
+        where: { tokenId: decoded.tokenId },
+      });
+      expect(session).toBeNull();
+    });
+
+    it("still clears the cookie even with no refresh token present", async () => {
       const res = await request(app).post("/api/v1/auth/signout");
       expect(res.status).toBe(200);
       expect(res.headers["set-cookie"]?.[0]).toMatch(/refreshToken=;/);

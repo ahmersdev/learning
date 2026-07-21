@@ -1,0 +1,11 @@
+model Session {
+  id         String   @id @default(uuid())
+  tokenId    String   @unique
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceInfo String?
+  createdAt  DateTime @default(now())
+  expiresAt  DateTime
+
+  @@index([userId])
+}

@@ -1,15 +1,20 @@
 import { type Request, type Response, type NextFunction } from "express";
-import { createUserService, signinService } from "../services/auth.service.ts";
+import {
+  createUserService,
+  signinService,
+  refreshSessionService,
+  signoutService,
+} from "../services/auth.service.ts";
 import type {
   SigninInputSchema,
   SignupInputSchema,
 } from "../schemas/auth.schema.ts";
 import { AppError } from "../utils/app-errors.ts";
-import { generateAccessToken, verifyRefreshToken } from "../utils/jwt.ts";
+import { verifyRefreshToken } from "../utils/jwt.ts";
 
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production", // only over HTTPS in prod
+  secure: process.env.NODE_ENV === "production",
   sameSite: "strict" as const,
 };
 
@@ -21,11 +26,12 @@ export const signup = async (
   try {
     const { user, accessToken, refreshToken } = await createUserService(
       req.body,
+      req.headers["user-agent"],
     );
 
     res.cookie("refreshToken", refreshToken, {
       ...REFRESH_COOKIE_OPTIONS,
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days, matches JWT_REFRESH_EXPIRY
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
     return res.status(201).json({
@@ -44,7 +50,10 @@ export const signin = async (
   next: NextFunction,
 ) => {
   try {
-    const { user, accessToken, refreshToken } = await signinService(req.body);
+    const { user, accessToken, refreshToken } = await signinService(
+      req.body,
+      req.headers["user-agent"],
+    );
 
     res.cookie("refreshToken", refreshToken, {
       ...REFRESH_COOKIE_OPTIONS,
@@ -74,11 +83,7 @@ export const refresh = async (
     }
 
     const decoded = verifyRefreshToken(token);
-
-    const newAccessToken = generateAccessToken({
-      userId: decoded.userId,
-      email: decoded.email,
-    });
+    const newAccessToken = await refreshSessionService(decoded.tokenId);
 
     return res.status(200).json({
       status: "success",
@@ -90,11 +95,22 @@ export const refresh = async (
 };
 
 export const signout = async (
-  _req: Request,
+  req: Request,
   res: Response,
   next: NextFunction,
 ) => {
   try {
+    const token = req.cookies.refreshToken;
+
+    if (token) {
+      try {
+        const decoded = verifyRefreshToken(token);
+        await signoutService(decoded.tokenId);
+      } catch {
+        // token already invalid/expired — nothing server-side to clean up
+      }
+    }
+
     res.clearCookie("refreshToken", REFRESH_COOKIE_OPTIONS);
     return res
       .status(200)

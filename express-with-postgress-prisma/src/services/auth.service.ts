@@ -1,16 +1,46 @@
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 import type {
   SignupInputSchema,
   SigninInputSchema,
 } from "../schemas/auth.schema.ts";
-import { generateAccessToken, generateRefreshToken } from "../utils/jwt.ts";
-import { prisma } from "../config/db.ts";
+import {
+  generateAccessToken,
+  generateRefreshToken,
+  REFRESH_EXPIRY_MS,
+} from "../utils/jwt.ts";
 import { ConflictError, UnauthorizedError } from "../utils/app-errors.ts";
+import { prisma } from "../config/db.ts";
 import { Prisma } from "../../generated/prisma/client.ts";
 
 const SALT_ROUNDS = 10;
 
-export const createUserService = async (userData: SignupInputSchema) => {
+const createSessionAndTokens = async (
+  userId: string,
+  email: string,
+  deviceInfo?: string,
+) => {
+  const tokenId = crypto.randomUUID();
+
+  await prisma.session.create({
+    data: {
+      tokenId,
+      userId,
+      deviceInfo,
+      expiresAt: new Date(Date.now() + REFRESH_EXPIRY_MS),
+    },
+  });
+
+  const accessToken = generateAccessToken({ userId, email });
+  const refreshToken = generateRefreshToken({ userId, email, tokenId });
+
+  return { accessToken, refreshToken };
+};
+
+export const createUserService = async (
+  userData: SignupInputSchema,
+  deviceInfo?: string,
+) => {
   const { fullName, username, email, password } = userData;
 
   const existingUser = await prisma.user.findFirst({
@@ -45,14 +75,11 @@ export const createUserService = async (userData: SignupInputSchema) => {
     throw error;
   }
 
-  const accessToken = generateAccessToken({
-    userId: user.id,
-    email: user.email,
-  });
-  const refreshToken = generateRefreshToken({
-    userId: user.id,
-    email: user.email,
-  });
+  const { accessToken, refreshToken } = await createSessionAndTokens(
+    user.id,
+    user.email,
+    deviceInfo,
+  );
 
   return {
     user: {
@@ -65,7 +92,10 @@ export const createUserService = async (userData: SignupInputSchema) => {
   };
 };
 
-export const signinService = async (credentials: SigninInputSchema) => {
+export const signinService = async (
+  credentials: SigninInputSchema,
+  deviceInfo?: string,
+) => {
   const { username, email, password } = credentials;
 
   const user = await prisma.user.findFirst({
@@ -82,18 +112,35 @@ export const signinService = async (credentials: SigninInputSchema) => {
     throw new UnauthorizedError("Invalid credentials");
   }
 
-  const accessToken = generateAccessToken({
-    userId: user.id,
-    email: user.email,
-  });
-  const refreshToken = generateRefreshToken({
-    userId: user.id,
-    email: user.email,
-  });
+  const { accessToken, refreshToken } = await createSessionAndTokens(
+    user.id,
+    user.email,
+    deviceInfo,
+  );
 
   return {
     user: { username: user.username, email: user.email },
     accessToken,
     refreshToken,
   };
+};
+
+export const refreshSessionService = async (tokenId: string) => {
+  const session = await prisma.session.findUnique({
+    where: { tokenId },
+    include: { user: true },
+  });
+
+  if (!session || session.expiresAt < new Date()) {
+    throw new UnauthorizedError("Session expired or revoked");
+  }
+
+  return generateAccessToken({
+    userId: session.user.id,
+    email: session.user.email,
+  });
+};
+
+export const signoutService = async (tokenId: string) => {
+  await prisma.session.deleteMany({ where: { tokenId } });
 };
