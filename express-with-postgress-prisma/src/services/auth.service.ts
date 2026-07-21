@@ -1,30 +1,53 @@
 import bcrypt from "bcrypt";
-import crypto from "crypto";
 import type {
   SignupInputSchema,
   SigninInputSchema,
 } from "../schemas/auth.schema.ts";
 import { generateAccessToken, generateRefreshToken } from "../utils/jwt.ts";
+import { prisma } from "../config/db.ts";
+import { ConflictError, UnauthorizedError } from "../utils/app-errors.ts";
 
 const SALT_ROUNDS = 10;
 
 export const createUserService = async (userData: SignupInputSchema) => {
   const { fullName, username, email, password } = userData;
 
+  const existingUser = await prisma.user.findFirst({
+    where: { OR: [{ email }, { username }] },
+  });
+
+  if (existingUser) {
+    throw new ConflictError("User already exists");
+  }
+
   const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
-  // TODO: once DB is wired up:
-  // 1. check if email/username already exists -> throw AppError("User already exists", 409)
-  // 2. save { fullName, username, email, hashedPassword } to DB
-  // 3. use the real DB-generated user._id below instead of this fake one
+  const user = await prisma.user.create({
+    data: {
+      fullName,
+      username,
+      email,
+      password: hashedPassword,
+      role: "user",
+      mustChangePassword: false,
+    },
+  });
 
-  const fakeUserId = crypto.randomUUID();
-
-  const accessToken = generateAccessToken({ userId: fakeUserId, email });
-  const refreshToken = generateRefreshToken({ userId: fakeUserId, email });
+  const accessToken = generateAccessToken({
+    userId: user.id,
+    email: user.email,
+  });
+  const refreshToken = generateRefreshToken({
+    userId: user.id,
+    email: user.email,
+  });
 
   return {
-    user: { fullName, username, email },
+    user: {
+      fullName: user.fullName,
+      username: user.username,
+      email: user.email,
+    },
     accessToken,
     refreshToken,
   };
@@ -33,26 +56,31 @@ export const createUserService = async (userData: SignupInputSchema) => {
 export const signinService = async (credentials: SigninInputSchema) => {
   const { username, email, password } = credentials;
 
-  // TODO: once DB is wired up:
-  // 1. find user by email or username
-  // 2. if not found -> throw new AppError("Invalid credentials", 401)
-  // 3. const isMatch = await bcrypt.compare(password, user.hashedPassword)
-  // 4. if (!isMatch) -> throw new AppError("Invalid credentials", 401)
+  const user = await prisma.user.findFirst({
+    where: email ? { email } : { username },
+  });
 
-  const fakeUserId = crypto.randomUUID();
-  const resolvedEmail = email || "stub@example.com";
+  if (!user) {
+    throw new UnauthorizedError("Invalid credentials");
+  }
+
+  const isMatch = await bcrypt.compare(password, user.password);
+
+  if (!isMatch) {
+    throw new UnauthorizedError("Invalid credentials");
+  }
 
   const accessToken = generateAccessToken({
-    userId: fakeUserId,
-    email: resolvedEmail,
+    userId: user.id,
+    email: user.email,
   });
   const refreshToken = generateRefreshToken({
-    userId: fakeUserId,
-    email: resolvedEmail,
+    userId: user.id,
+    email: user.email,
   });
 
   return {
-    user: { username, email: resolvedEmail },
+    user: { username: user.username, email: user.email },
     accessToken,
     refreshToken,
   };
