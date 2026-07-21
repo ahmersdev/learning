@@ -54,9 +54,9 @@ router.post("/signup", authLimiter, validate(signupSchema), signup);
  *             type: object
  *             required: [password]
  *             properties:
- *               username: { type: string }
- *               email: { type: string }
- *               password: { type: string }
+ *               username: { type: string, example: "johndoe" }
+ *               email: { type: string, example: "john@example.com" }
+ *               password: { type: string, example: "Password1!" }
  *     responses:
  *       200:
  *         description: Login successful
