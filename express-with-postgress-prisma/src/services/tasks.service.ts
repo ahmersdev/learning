@@ -6,6 +6,13 @@ import type {
   TaskQueryInput,
 } from "../schemas/tasks.schema.ts";
 
+const ASSIGNEE_FIELDS = {
+  id: true,
+  fullName: true,
+  username: true,
+  email: true,
+};
+
 export const assertCanAccessProject = async (
   projectId: string,
   userId: string,
@@ -62,6 +69,7 @@ export const postTaskService = async (
       dueDate: dueDate ? new Date(dueDate) : null,
       assigneeId: assigneeId ?? null,
     },
+    include: { assignee: { select: ASSIGNEE_FIELDS } },
   });
 };
 
@@ -89,6 +97,7 @@ export const getTasksService = async (
       orderBy,
       skip: (page - 1) * limit,
       take: limit,
+      include: { assignee: { select: ASSIGNEE_FIELDS } },
     }),
     prisma.task.count({ where }),
   ]);
@@ -107,6 +116,7 @@ export const getTasksService = async (
 export const getTaskByIdService = async (projectId: string, taskId: string) => {
   const task = await prisma.task.findFirst({
     where: { id: taskId, projectId },
+    include: { assignee: { select: ASSIGNEE_FIELDS } },
   });
 
   if (!task) {
@@ -138,7 +148,10 @@ export const patchTaskByIdService = async (
     throw new NotFoundError("Task not found");
   }
 
-  return prisma.task.findUniqueOrThrow({ where: { id: taskId } });
+  return prisma.task.findUniqueOrThrow({
+    where: { id: taskId },
+    include: { assignee: { select: ASSIGNEE_FIELDS } },
+  });
 };
 
 export const deleteTaskByIdService = async (

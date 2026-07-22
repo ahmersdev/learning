@@ -195,6 +195,7 @@ describe("Task routes", () => {
       expect(res.body.data.task.status).toBe("backlog");
       expect(res.body.data.task.priority).toBe("medium");
       expect(res.body.data.task.assigneeId).toBeNull();
+      expect(res.body.data.task.assignee).toBeNull();
 
       const dbTask = await prisma.task.findUnique({
         where: { id: res.body.data.task.id },
@@ -219,6 +220,11 @@ describe("Task routes", () => {
       expect(res.body.data.task.status).toBe("in_progress");
       expect(res.body.data.task.priority).toBe("high");
       expect(res.body.data.task.assigneeId).toBe(assigneeId);
+      expect(res.body.data.task.assignee).toMatchObject({
+        id: assigneeId,
+        username: ASSIGNEE_USERNAME,
+        email: ASSIGNEE_EMAIL,
+      });
       expect(new Date(res.body.data.task.dueDate).toISOString()).toBe(
         "2026-12-31T00:00:00.000Z",
       );
@@ -347,6 +353,11 @@ describe("Task routes", () => {
 
       expect(res.status).toBe(200);
       expect(res.body.data.tasks.length).toBe(2);
+      res.body.data.tasks.forEach(
+        (task: { assignee: { id: string } | null }) => {
+          expect(task.assignee?.id).toBe(assigneeId);
+        },
+      );
     });
 
     it("sorts by priority ascending (enum declaration order: low < medium < high < urgent)", async () => {
@@ -446,13 +457,22 @@ describe("Task routes", () => {
       expect(res.status).toBe(400);
     });
 
-    it("returns the task for a workspace member", async () => {
+    it("returns the task for a workspace member, with assignee populated", async () => {
+      await prisma.task.update({
+        where: { id: taskId },
+        data: { assigneeId },
+      });
+
       const res = await request(app)
         .get(`/api/v1/projects/${projectId}/tasks/${taskId}`)
         .set("Authorization", `Bearer ${ownerToken}`);
 
       expect(res.status).toBe(200);
       expect(res.body.data.task.id).toBe(taskId);
+      expect(res.body.data.task.assignee).toMatchObject({
+        id: assigneeId,
+        username: ASSIGNEE_USERNAME,
+      });
     });
 
     it("returns 404 for a non-member", async () => {
@@ -555,6 +575,10 @@ describe("Task routes", () => {
 
       expect(res.status).toBe(200);
       expect(res.body.data.task.assigneeId).toBe(assigneeId);
+      expect(res.body.data.task.assignee).toMatchObject({
+        id: assigneeId,
+        username: ASSIGNEE_USERNAME,
+      });
     });
   });
 
