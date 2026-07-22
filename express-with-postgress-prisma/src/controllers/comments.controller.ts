@@ -74,9 +74,9 @@ export const patchCommentById = async (
 
     const { taskId, commentId } = req.params;
     await assertCanAccessTask(taskId, req.user.id);
-    await assertIsCommentAuthor(commentId, req.user.id);
+    await assertIsCommentAuthor(taskId, commentId, req.user.id);
 
-    const comment = await patchCommentByIdService(taskId, commentId, req.body);
+    const comment = await patchCommentByIdService(commentId, req.body);
 
     return res.status(200).json({
       status: "success",
@@ -100,9 +100,8 @@ export const deleteCommentById = async (
 
     const { taskId, commentId } = req.params;
     await assertCanAccessTask(taskId, req.user.id);
-    await assertIsCommentAuthor(commentId, req.user.id);
-
-    await deleteCommentByIdService(taskId, commentId);
+    await assertIsCommentAuthor(taskId, commentId, req.user.id);
+    await deleteCommentByIdService(commentId);
 
     return res.status(200).json({
       status: "success",

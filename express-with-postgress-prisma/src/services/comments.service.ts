@@ -1,36 +1,52 @@
-import crypto from "crypto";
+import { prisma } from "../config/db.ts";
+import { NotFoundError, ForbiddenError } from "../utils/app-errors.ts";
 import type {
   CommentPostInput,
   CommentPatchInput,
 } from "../schemas/comments.schema.ts";
-import { AppError, ForbiddenError } from "../utils/app-errors.ts";
 
-// TODO: once DB is wired up:
-// - assertCanAccessTask should look up the task, trace it back to its
-//   project -> workspace, and confirm the requesting user is a member
-//   of that workspace (throw AppError 404 "Task not found" if either
-//   the task doesn't exist or the user isn't a member)
-// - assertIsCommentAuthor should look up the real comment and compare
-//   its authorId to the requesting user (throw AppError 404 "Comment
-//   not found" if it doesn't exist, ForbiddenError if it exists but
-//   belongs to someone else)
-// - all functions should perform real queries/writes scoped to taskId
+const COMMENT_AUTHOR_FIELDS = { id: true, fullName: true, username: true };
 
 export const assertCanAccessTask = async (
   taskId: string,
   userId: string,
 ): Promise<void> => {
-  // TODO: check task exists + user is a member of its workspace
-  return;
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { project: { select: { workspaceId: true } } },
+  });
+
+  if (!task) {
+    throw new NotFoundError("Task not found");
+  }
+
+  const membership = await prisma.workspaceMember.findUnique({
+    where: {
+      workspaceId_userId: { workspaceId: task.project.workspaceId, userId },
+    },
+  });
+
+  if (!membership) {
+    throw new NotFoundError("Task not found");
+  }
 };
 
 export const assertIsCommentAuthor = async (
+  taskId: string,
   commentId: string,
   userId: string,
 ): Promise<void> => {
-  // TODO: look up real comment.authorId and compare to userId
-  // For now stub every requester as the author so the flow can be tested
-  return;
+  const comment = await prisma.comment.findFirst({
+    where: { id: commentId, taskId },
+  });
+
+  if (!comment) {
+    throw new NotFoundError("Comment not found");
+  }
+
+  if (comment.authorId !== userId) {
+    throw new ForbiddenError("You can only modify your own comments");
+  }
 };
 
 export const postCommentService = async (
@@ -40,53 +56,33 @@ export const postCommentService = async (
 ) => {
   const { content } = commentData;
 
-  return {
-    id: crypto.randomUUID(),
-    taskId,
-    authorId,
-    content,
-    createdAt: new Date().toISOString(),
-  };
+  return prisma.comment.create({
+    data: { taskId, authorId, content },
+    include: { author: { select: COMMENT_AUTHOR_FIELDS } },
+  });
 };
 
 export const getCommentsService = async (taskId: string) => {
-  // TODO: return all comments where taskId matches
-  return [
-    {
-      id: crypto.randomUUID(),
-      taskId,
-      authorId: "stub-author-id",
-      content: "Stub comment",
-      createdAt: new Date().toISOString(),
-    },
-  ];
+  return prisma.comment.findMany({
+    where: { taskId },
+    include: { author: { select: COMMENT_AUTHOR_FIELDS } },
+    orderBy: { createdAt: "asc" }, // chronological — a comment thread reads oldest-first
+  });
 };
 
 export const patchCommentByIdService = async (
-  taskId: string,
   commentId: string,
   updates: CommentPatchInput,
 ) => {
-  // TODO: find comment by id -> if not found OR not on this task,
-  // throw new AppError("Comment not found", 404)
-  // apply updates, save
-
-  return {
-    id: commentId,
-    taskId,
-    authorId: "stub-author-id",
-    content: updates.content,
-    createdAt: new Date().toISOString(),
-  };
+  // existence + ownership already confirmed by assertIsCommentAuthor,
+  // called by the controller immediately before this
+  return prisma.comment.update({
+    where: { id: commentId },
+    data: { content: updates.content },
+    include: { author: { select: COMMENT_AUTHOR_FIELDS } },
+  });
 };
 
-export const deleteCommentByIdService = async (
-  taskId: string,
-  commentId: string,
-) => {
-  // TODO: find comment by id -> if not found OR not on this task,
-  // throw new AppError("Comment not found", 404)
-  // delete from DB
-
-  return;
+export const deleteCommentByIdService = async (commentId: string) => {
+  await prisma.comment.delete({ where: { id: commentId } });
 };

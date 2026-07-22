@@ -18,4 +18,5 @@ model User {
   workspaces Workspace[]
   workspaceMemberships WorkspaceMember[]
   assignedTasks Task[]
+  comments Comment[]
 }

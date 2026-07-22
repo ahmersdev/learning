@@ -30,4 +30,6 @@ model Task {
 
   @@index([projectId])
   @@index([assigneeId])
+
+  comments Comment[]
 }
