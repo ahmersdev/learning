@@ -25,9 +25,12 @@ export const postTask = async (
     }
 
     const { projectId } = req.params;
-    await assertCanAccessProject(projectId, req.user.id);
+    const { workspaceId } = await assertCanAccessProject(
+      projectId,
+      req.user.id,
+    );
 
-    const task = await postTaskService(projectId, req.body);
+    const task = await postTaskService(projectId, workspaceId, req.body);
 
     return res.status(201).json({
       status: "success",
@@ -99,9 +102,16 @@ export const patchTaskById = async (
     }
 
     const { projectId, taskId } = req.params;
-    await assertCanAccessProject(projectId, req.user.id);
-
-    const task = await patchTaskByIdService(projectId, taskId, req.body);
+    const { workspaceId } = await assertCanAccessProject(
+      projectId,
+      req.user.id,
+    );
+    const task = await patchTaskByIdService(
+      projectId,
+      workspaceId,
+      taskId,
+      req.body,
+    );
 
     return res.status(200).json({
       status: "success",

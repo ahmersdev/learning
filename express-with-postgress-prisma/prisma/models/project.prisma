@@ -8,4 +8,6 @@ model Project {
   updatedAt   DateTime  @updatedAt
 
   @@index([workspaceId])
+
+  tasks Task[]
 }

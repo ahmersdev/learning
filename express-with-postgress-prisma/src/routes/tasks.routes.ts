@@ -14,6 +14,7 @@ import {
   taskPostSchema,
   taskQuerySchema,
 } from "../schemas/tasks.schema.ts";
+import { validateUuid } from "../middlewares/validate-uuid.middleware.ts";
 
 const router = Router();
 
@@ -57,6 +58,7 @@ const router = Router();
 router.post(
   "/:projectId/tasks",
   requireAuth,
+  validateUuid("projectId"),
   generalLimiter,
   validate(taskPostSchema),
   postTask,
@@ -109,6 +111,7 @@ router.post(
 router.get(
   "/:projectId/tasks",
   requireAuth,
+  validateUuid("projectId"),
   generalLimiter,
   validate(taskQuerySchema, "query"),
   getTasks,
@@ -142,6 +145,7 @@ router.get(
 router.get(
   "/:projectId/tasks/:taskId",
   requireAuth,
+  validateUuid("projectId", "taskId"),
   generalLimiter,
   getTaskById,
 );
@@ -190,6 +194,7 @@ router.get(
 router.patch(
   "/:projectId/tasks/:taskId",
   requireAuth,
+  validateUuid("projectId", "taskId"),
   generalLimiter,
   validate(taskPatchSchema),
   patchTaskById,
@@ -223,6 +228,7 @@ router.patch(
 router.delete(
   "/:projectId/tasks/:taskId",
   requireAuth,
+  validateUuid("projectId", "taskId"),
   generalLimiter,
   deleteTaskById,
 );
