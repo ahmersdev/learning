@@ -10,6 +10,7 @@ import {
   getWorkspaceMembersService,
   patchWorkspaceMembersByIdService,
   deleteWorkspaceMembersByIdService,
+  resetMemberPasswordService,
 } from "../services/workspace-members.service.ts";
 
 export const postWorkspaceMembers = async (
@@ -136,6 +137,40 @@ export const deleteWorkspaceMembersById = async (
     return res.status(200).json({
       status: "success",
       message: "Member removed successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const resetMemberPassword = async (
+  req: Request<{ workspaceId: string; userId: string }>,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (!req.user) {
+      throw new AppError("Unauthorized", 401);
+    }
+
+    const { workspaceId, userId } = req.params;
+    const requesterRole = await getRequesterRoleService(
+      workspaceId,
+      req.user.id,
+    );
+
+    const result = await resetMemberPasswordService(
+      req.user.id,
+      requesterRole,
+      workspaceId,
+      userId,
+    );
+
+    return res.status(200).json({
+      status: "success",
+      message:
+        "Password reset. Share the new temporary password with the member securely.",
+      data: result,
     });
   } catch (error) {
     next(error);

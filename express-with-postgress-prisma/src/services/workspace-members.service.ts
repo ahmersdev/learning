@@ -7,12 +7,16 @@ import {
 import {
   findOrCreateInvitedUser,
   deriveDisplayNameFromEmail,
+  generateTempPassword,
 } from "../utils/user-provisioning.ts";
 import type {
   WorkspaceMembersPostInput,
   WorkspaceMembersPatchInput,
 } from "../schemas/workspace-members.schema.ts";
 import { Prisma } from "../../generated/prisma/client.ts";
+import bcrypt from "bcrypt";
+
+const SALT_ROUNDS = 10;
 
 const MEMBER_USER_FIELDS = {
   id: true,
@@ -149,4 +153,56 @@ export const deleteWorkspaceMembersByIdService = async (
   if (count === 0) {
     throw new NotFoundError("Member not found");
   }
+};
+
+export const resetMemberPasswordService = async (
+  requesterId: string,
+  requesterRole: "admin" | "member",
+  workspaceId: string,
+  targetUserId: string,
+) => {
+  assertIsAdmin(requesterRole);
+
+  if (targetUserId === requesterId) {
+    throw new ForbiddenError(
+      "Use PATCH /auth/change-password to change your own password",
+    );
+  }
+
+  const membership = await prisma.workspaceMember.findUnique({
+    where: { workspaceId_userId: { workspaceId, userId: targetUserId } },
+    include: { user: true },
+  });
+
+  if (!membership) {
+    throw new NotFoundError("Member not found");
+  }
+
+  if (!membership.user.mustChangePassword) {
+    throw new ForbiddenError(
+      "This member has already set their own password and cannot be reset this way",
+    );
+  }
+
+  const tempPassword = generateTempPassword();
+  const hashedPassword = await bcrypt.hash(tempPassword, SALT_ROUNDS);
+
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: targetUserId },
+      data: { password: hashedPassword, mustChangePassword: true },
+    }),
+    prisma.session.deleteMany({ where: { userId: targetUserId } }),
+  ]);
+
+  return {
+    user: {
+      id: membership.user.id,
+      fullName: membership.user.fullName,
+      username: membership.user.username,
+      email: membership.user.email,
+      mustChangePassword: membership.user.mustChangePassword,
+    },
+    tempPassword,
+  };
 };

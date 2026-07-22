@@ -17,16 +17,31 @@ const OUTSIDER_USERNAME = "wsmembersoutsider";
 
 const NEW_INVITE_EMAIL = "wsmembers-newinvite@example.com";
 
+const UNCHANGED_PW_EMAIL = "wsmembers-unchangedpw@example.com";
+const UNCHANGED_PW_USERNAME = "wsmembersunchangedpw";
+
+const CHANGED_PW_EMAIL = "wsmembers-changedpw@example.com";
+const CHANGED_PW_USERNAME = "wsmemberschangedpw";
+
+const RESETPW_NONADMIN_EMAIL = "wsmembers-resetpwnonadmin@example.com";
+const RESETPW_NONADMIN_USERNAME = "wsmembersresetpwnonadmin";
+
 const ALL_EMAILS = [
   OWNER_EMAIL,
   EXISTING_INVITE_EMAIL,
   OUTSIDER_EMAIL,
   NEW_INVITE_EMAIL,
+  UNCHANGED_PW_EMAIL,
+  CHANGED_PW_EMAIL,
+  RESETPW_NONADMIN_EMAIL,
 ];
 const ALL_USERNAMES = [
   OWNER_USERNAME,
   EXISTING_INVITE_USERNAME,
   OUTSIDER_USERNAME,
+  UNCHANGED_PW_USERNAME,
+  CHANGED_PW_USERNAME,
+  RESETPW_NONADMIN_USERNAME,
 ];
 
 let ownerToken: string;
@@ -331,6 +346,175 @@ describe("Workspace Member routes", () => {
         },
       });
       expect(dbMembership?.role).toBe("member");
+    });
+  });
+
+  describe("POST /api/v1/workspaces/:workspaceId/members/:userId/reset-password", () => {
+    let unchangedMemberId: string;
+    let changedMemberId: string;
+    let nonAdminMemberToken: string;
+
+    beforeAll(async () => {
+      const unchangedMember = await prisma.user.create({
+        data: {
+          fullName: "Unchanged PW Member",
+          username: UNCHANGED_PW_USERNAME,
+          email: UNCHANGED_PW_EMAIL,
+          password: await bcrypt.hash("TempPassword1!", 10),
+          role: "user",
+          mustChangePassword: true, // never logged in / never changed it
+        },
+      });
+      unchangedMemberId = unchangedMember.id;
+
+      const changedMember = await prisma.user.create({
+        data: {
+          fullName: "Changed PW Member",
+          username: CHANGED_PW_USERNAME,
+          email: CHANGED_PW_EMAIL,
+          password: await bcrypt.hash("TheirOwnPassword1!", 10),
+          role: "user",
+          mustChangePassword: false, // already set their own password
+        },
+      });
+      changedMemberId = changedMember.id;
+
+      const nonAdminMember = await prisma.user.create({
+        data: {
+          fullName: "Reset PW Non Admin Requester",
+          username: RESETPW_NONADMIN_USERNAME,
+          email: RESETPW_NONADMIN_EMAIL,
+          password: await bcrypt.hash("Password1!", 10),
+          role: "user",
+          mustChangePassword: false,
+        },
+      });
+      nonAdminMemberToken = signToken(nonAdminMember);
+
+      await prisma.workspaceMember.createMany({
+        data: [
+          { workspaceId, userId: unchangedMemberId, role: "member" },
+          { workspaceId, userId: changedMemberId, role: "member" },
+          { workspaceId, userId: nonAdminMember.id, role: "member" },
+        ],
+      });
+    });
+
+    it("returns 401 with no access token", async () => {
+      const res = await request(app).post(
+        `/api/v1/workspaces/${workspaceId}/members/${unchangedMemberId}/reset-password`,
+      );
+
+      expect(res.status).toBe(401);
+    });
+
+    it("returns 404 when the requester isn't a member of the workspace", async () => {
+      const res = await request(app)
+        .post(
+          `/api/v1/workspaces/${workspaceId}/members/${unchangedMemberId}/reset-password`,
+        )
+        .set("Authorization", `Bearer ${outsiderToken}`);
+
+      expect(res.status).toBe(404);
+    });
+
+    it("returns 403 when a non-admin workspace member attempts to reset", async () => {
+      const res = await request(app)
+        .post(
+          `/api/v1/workspaces/${workspaceId}/members/${unchangedMemberId}/reset-password`,
+        )
+        .set("Authorization", `Bearer ${nonAdminMemberToken}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it("returns 403 when the admin tries to reset their own password", async () => {
+      const res = await request(app)
+        .post(
+          `/api/v1/workspaces/${workspaceId}/members/${ownerId}/reset-password`,
+        )
+        .set("Authorization", `Bearer ${ownerToken}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it("returns 404 for a userId that isn't a member of this workspace", async () => {
+      const res = await request(app)
+        .post(
+          `/api/v1/workspaces/${workspaceId}/members/${crypto.randomUUID()}/reset-password`,
+        )
+        .set("Authorization", `Bearer ${ownerToken}`);
+
+      expect(res.status).toBe(404);
+    });
+
+    it("returns 403 when the member has already changed their own password", async () => {
+      const res = await request(app)
+        .post(
+          `/api/v1/workspaces/${workspaceId}/members/${changedMemberId}/reset-password`,
+        )
+        .set("Authorization", `Bearer ${ownerToken}`);
+
+      expect(res.status).toBe(403);
+      expect(res.body.message).toMatch(/already set their own password/i);
+    });
+
+    it("resets the password for a member who hasn't changed it, and revokes their sessions", async () => {
+      const signinRes = await request(app).post("/api/v1/auth/signin").send({
+        email: UNCHANGED_PW_EMAIL,
+        password: "TempPassword1!",
+      });
+      expect(signinRes.status).toBe(200);
+
+      const oldRefreshCookie = signinRes.headers["set-cookie"]?.[0]!;
+      const oldRefreshToken = oldRefreshCookie
+        .split("refreshToken=")[1]!
+        .split(";")[0]!;
+
+      const res = await request(app)
+        .post(
+          `/api/v1/workspaces/${workspaceId}/members/${unchangedMemberId}/reset-password`,
+        )
+        .set("Authorization", `Bearer ${ownerToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.tempPassword).toBeDefined();
+      expect(res.body.data.user.id).toBe(unchangedMemberId);
+      expect(res.body.data.user.mustChangePassword).toBe(true);
+
+      const oldPasswordSignin = await request(app)
+        .post("/api/v1/auth/signin")
+        .send({ email: UNCHANGED_PW_EMAIL, password: "TempPassword1!" });
+      expect(oldPasswordSignin.status).toBe(401);
+
+      const newPasswordSignin = await request(app)
+        .post("/api/v1/auth/signin")
+        .send({
+          email: UNCHANGED_PW_EMAIL,
+          password: res.body.data.tempPassword,
+        });
+      expect(newPasswordSignin.status).toBe(200);
+
+      const refreshWithOldToken = await request(app)
+        .post("/api/v1/auth/refresh")
+        .set("Cookie", [`refreshToken=${oldRefreshToken}`]);
+      expect(refreshWithOldToken.status).toBe(401);
+
+      const dbUser = await prisma.user.findUnique({
+        where: { id: unchangedMemberId },
+      });
+      expect(dbUser?.mustChangePassword).toBe(true);
+    });
+
+    it("can be reset again if the member still hasn't changed the newly reset password", async () => {
+      const res = await request(app)
+        .post(
+          `/api/v1/workspaces/${workspaceId}/members/${unchangedMemberId}/reset-password`,
+        )
+        .set("Authorization", `Bearer ${ownerToken}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.tempPassword).toBeDefined();
     });
   });
 

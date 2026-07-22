@@ -1,12 +1,16 @@
 import { Router } from "express";
 import { requireAuth } from "../middlewares/auth.middleware.ts";
-import { generalLimiter } from "../middlewares/rate-limiter.middleware.ts";
+import {
+  authLimiter,
+  generalLimiter,
+} from "../middlewares/rate-limiter.middleware.ts";
 import { validate } from "../middlewares/validate.middleware.ts";
 import {
   postWorkspaceMembers,
   getWorkspaceMembers,
   patchWorkspaceMembersById,
   deleteWorkspaceMembersById,
+  resetMemberPassword,
 } from "../controllers/workspace-members.controller.ts";
 import {
   workspaceMembersPatchSchema,
@@ -166,3 +170,41 @@ router.delete(
 );
 
 export default router;
+
+/**
+ * @openapi
+ * /workspaces/{workspaceId}/members/{userId}/reset-password:
+ *   post:
+ *     summary: Reset a member's password to a new temporary one (admin only)
+ *     description: >
+ *       Only works if the member hasn't changed their own password yet
+ *       (mustChangePassword is still true). Returns a new temporary password
+ *       once — it is never stored or retrievable again after this response.
+ *     tags: [Workspace Members]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: workspaceId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Password reset successfully
+ *       401:
+ *         description: Unauthorized — missing or invalid access token
+ *       403:
+ *         description: Forbidden — requester is not a workspace admin, is resetting their own password, or the member has already set their own password
+ *       404:
+ *         description: Member not found
+ */
+router.post(
+  "/:workspaceId/members/:userId/reset-password",
+  requireAuth,
+  authLimiter,
+  resetMemberPassword,
+);
