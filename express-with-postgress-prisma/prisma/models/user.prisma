@@ -16,4 +16,5 @@ model User {
 
   sessions Session[]
   workspaces Workspace[]
+  workspaceMemberships WorkspaceMember[]
 }

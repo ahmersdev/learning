@@ -11,8 +11,16 @@ export const postWorkspaceService = async (
 ) => {
   const { name, description } = workspaceData;
 
-  return prisma.workspace.create({
-    data: { name, description: description ?? null, ownerId },
+  return prisma.$transaction(async (tx) => {
+    const workspace = await tx.workspace.create({
+      data: { name, description: description ?? null, ownerId },
+    });
+
+    await tx.workspaceMember.create({
+      data: { workspaceId: workspace.id, userId: ownerId, role: "admin" },
+    });
+
+    return workspace;
   });
 };
 

@@ -8,4 +8,6 @@ model Workspace {
   updatedAt   DateTime @updatedAt
 
   @@index([ownerId])
+
+  members WorkspaceMember[]
 }
