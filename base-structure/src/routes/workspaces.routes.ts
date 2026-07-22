@@ -20,7 +20,7 @@ const router = Router();
  * @openapi
  * /workspaces:
  *   post:
- *     summary: Create a new workspace
+ *     summary: Create a new workspace (admin only)
  *     tags: [Workspaces]
  *     security:
  *       - bearerAuth: []
@@ -41,6 +41,8 @@ const router = Router();
  *         description: Validation failed
  *       401:
  *         description: Unauthorized — missing or invalid access token
+ *       403:
+ *         description: Forbidden — admin access required
  */
 router.post(
   "/",
@@ -54,7 +56,7 @@ router.post(
  * @openapi
  * /workspaces:
  *   get:
- *     summary: List all workspaces owned by the currently authenticated user
+ *     summary: List all workspaces owned by the currently authenticated user (admin only)
  *     tags: [Workspaces]
  *     security:
  *       - bearerAuth: []
@@ -63,6 +65,8 @@ router.post(
  *         description: List of workspaces retrieved successfully
  *       401:
  *         description: Unauthorized — missing or invalid access token
+ *       403:
+ *         description: Forbidden — admin access required
  */
 router.get("/", requireAuth, generalLimiter, getWorkspace);
 
@@ -70,7 +74,7 @@ router.get("/", requireAuth, generalLimiter, getWorkspace);
  * @openapi
  * /workspaces/{workspaceId}:
  *   get:
- *     summary: Get a single workspace by ID
+ *     summary: Get a single workspace by ID (admin only)
  *     tags: [Workspaces]
  *     security:
  *       - bearerAuth: []
@@ -85,6 +89,8 @@ router.get("/", requireAuth, generalLimiter, getWorkspace);
  *         description: Workspace retrieved successfully
  *       401:
  *         description: Unauthorized — missing or invalid access token
+ *       403:
+ *         description: Forbidden — admin access required
  *       404:
  *         description: Workspace not found
  */
@@ -94,7 +100,7 @@ router.get("/:workspaceId", requireAuth, generalLimiter, getWorkspaceById);
  * @openapi
  * /workspaces/{workspaceId}:
  *   patch:
- *     summary: Update a workspace's name and/or description
+ *     summary: Update a workspace's name and/or description (admin only)
  *     tags: [Workspaces]
  *     security:
  *       - bearerAuth: []
@@ -121,6 +127,8 @@ router.get("/:workspaceId", requireAuth, generalLimiter, getWorkspaceById);
  *         description: Validation failed
  *       401:
  *         description: Unauthorized — missing or invalid access token
+ *       403:
+ *         description: Forbidden — admin access required
  *       404:
  *         description: Workspace not found
  */
@@ -136,7 +144,7 @@ router.patch(
  * @openapi
  * /workspaces/{workspaceId}:
  *   delete:
- *     summary: Delete a workspace
+ *     summary: Delete a workspace (admin only)
  *     tags: [Workspaces]
  *     security:
  *       - bearerAuth: []
@@ -151,6 +159,8 @@ router.patch(
  *         description: Workspace deleted successfully
  *       401:
  *         description: Unauthorized — missing or invalid access token
+ *       403:
+ *         description: Forbidden — admin access required
  *       404:
  *         description: Workspace not found
  */
