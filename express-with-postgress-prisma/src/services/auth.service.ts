@@ -3,6 +3,7 @@ import crypto from "crypto";
 import type {
   SignupInputSchema,
   SigninInputSchema,
+  ChangePasswordInput,
 } from "../schemas/auth.schema.ts";
 import {
   generateAccessToken,
@@ -132,7 +133,13 @@ export const signinService = async (
   );
 
   return {
-    user: { username: user.username, email: user.email, role: user.role },
+    user: {
+      fullName: user.fullName,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      mustChangePassword: user.mustChangePassword,
+    },
     accessToken,
     refreshToken,
   };
@@ -159,4 +166,39 @@ export const refreshSessionService = async (tokenId: string) => {
 
 export const signoutService = async (tokenId: string) => {
   await prisma.session.deleteMany({ where: { tokenId } });
+};
+
+export const changePasswordService = async (
+  userId: string,
+  { currentPassword, newPassword }: ChangePasswordInput,
+  currentTokenId?: string,
+) => {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+
+  if (!user) {
+    throw new UnauthorizedError("Invalid credentials");
+  }
+
+  const isMatch = await bcrypt.compare(currentPassword, user.password);
+
+  if (!isMatch) {
+    throw new UnauthorizedError("Current password is incorrect");
+  }
+
+  const hashedNewPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      password: hashedNewPassword,
+      mustChangePassword: false,
+    },
+  });
+
+  await prisma.session.deleteMany({
+    where: {
+      userId,
+      ...(currentTokenId ? { tokenId: { not: currentTokenId } } : {}),
+    },
+  });
 };

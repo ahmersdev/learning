@@ -9,6 +9,7 @@ const PUBLIC_USER_FIELDS = {
   username: true,
   email: true,
   role: true,
+  mustChangePassword: true,
 };
 
 const ADMIN_USER_FIELDS = {

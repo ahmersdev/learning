@@ -141,6 +141,40 @@ describe("User routes", () => {
       expect(res.status).toBe(404);
     });
 
+    it("returns mustChangePassword: true for a user who hasn't reset their temp password", async () => {
+      const tempPwUser = await prisma.user.create({
+        data: {
+          fullName: "Temp Password User",
+          username: "tempuserpwcheck",
+          email: "temp-pw-check@example.com",
+          password: await bcrypt.hash("Password1!", 10),
+          role: "user",
+          mustChangePassword: true,
+        },
+      });
+
+      const token = jwt.sign(
+        {
+          userId: tempPwUser.id,
+          email: tempPwUser.email,
+          username: tempPwUser.username,
+          fullName: tempPwUser.fullName,
+          role: tempPwUser.role,
+        },
+        process.env.JWT_ACCESS_SECRET!,
+        { expiresIn: "15m" },
+      );
+
+      const res = await request(app)
+        .get("/api/v1/users/me")
+        .set("Authorization", `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.user.mustChangePassword).toBe(true);
+
+      await prisma.user.delete({ where: { id: tempPwUser.id } });
+    });
+
     it("returns the real user profile from the DB, including role, with a valid access token", async () => {
       const res = await request(app)
         .get("/api/v1/users/me")
@@ -151,6 +185,7 @@ describe("User routes", () => {
       expect(res.body.data.user.username).toBe(PRIMARY_USERNAME);
       expect(res.body.data.user.email).toBe(PRIMARY_EMAIL);
       expect(res.body.data.user.role).toBe("user");
+      expect(res.body.data.user.mustChangePassword).toBe(false);
       expect(res.body.data.user.password).toBeUndefined();
     });
   });

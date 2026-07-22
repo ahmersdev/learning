@@ -4,8 +4,10 @@ import {
   signinService,
   refreshSessionService,
   signoutService,
+  changePasswordService,
 } from "../services/auth.service.ts";
 import type {
+  ChangePasswordInput,
   SigninInputSchema,
   SignupInputSchema,
 } from "../schemas/auth.schema.ts";
@@ -115,6 +117,39 @@ export const signout = async (
     return res
       .status(200)
       .json({ status: "success", message: "Logged out successfully" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const changePassword = async (
+  req: Request<{}, {}, ChangePasswordInput>,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (!req.user) {
+      throw new AppError("Unauthorized", 401);
+    }
+
+    let currentTokenId: string | undefined;
+    const refreshCookie = req.cookies.refreshToken;
+
+    if (refreshCookie) {
+      try {
+        currentTokenId = verifyRefreshToken(refreshCookie).tokenId;
+      } catch {
+        // invalid/expired refresh cookie — proceed without preserving a session
+      }
+    }
+
+    await changePasswordService(req.user.id, req.body, currentTokenId);
+
+    return res.status(200).json({
+      status: "success",
+      message:
+        "Password changed successfully. Other active sessions have been logged out.",
+    });
   } catch (error) {
     next(error);
   }

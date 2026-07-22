@@ -22,12 +22,22 @@ const SIGNOUT_USERNAME = "signouttestuser";
 const ROLE_CHECK_EMAIL = "role-check@example.com";
 const ROLE_CHECK_USERNAME = "rolecheckuser";
 
+const CHANGE_PW_EMAIL = "change-pw-test@example.com";
+const CHANGE_PW_USERNAME = "changepwtestuser";
+const CHANGE_PW_CURRENT = "CurrentPassword1!";
+
+const SESSION_REVOKE_EMAIL = "session-revoke-test@example.com";
+const SESSION_REVOKE_USERNAME = "sessionrevoketest";
+const SESSION_REVOKE_PASSWORD = "Password1!";
+
 const ALL_EMAILS = [
   SIGNUP_EMAIL,
   SIGNIN_EMAIL,
   REFRESH_EMAIL,
   SIGNOUT_EMAIL,
   ROLE_CHECK_EMAIL,
+  CHANGE_PW_EMAIL,
+  SESSION_REVOKE_EMAIL,
 ];
 const ALL_USERNAMES = [
   SIGNUP_USERNAME,
@@ -35,6 +45,8 @@ const ALL_USERNAMES = [
   REFRESH_USERNAME,
   SIGNOUT_USERNAME,
   ROLE_CHECK_USERNAME,
+  CHANGE_PW_USERNAME,
+  SESSION_REVOKE_USERNAME,
 ];
 
 const cleanup = () =>
@@ -150,6 +162,31 @@ describe("Auth routes", () => {
       });
     });
 
+    it("returns mustChangePassword: true for a user signing in with a temp password", async () => {
+      const tempPassword = "TempPassword1!";
+
+      const tempPwUser = await prisma.user.create({
+        data: {
+          fullName: "Temp Password Signin User",
+          username: "tempsigninuser",
+          email: "temp-signin-check@example.com",
+          password: await bcrypt.hash(tempPassword, 10),
+          role: "user",
+          mustChangePassword: true,
+        },
+      });
+
+      const res = await request(app).post("/api/v1/auth/signin").send({
+        email: tempPwUser.email,
+        password: tempPassword,
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.user.mustChangePassword).toBe(true);
+
+      await prisma.user.delete({ where: { id: tempPwUser.id } });
+    });
+
     it("signs in, sets refreshToken cookie, creates a session, and returns role", async () => {
       const res = await request(app).post("/api/v1/auth/signin").send({
         email: SIGNIN_EMAIL,
@@ -157,8 +194,10 @@ describe("Auth routes", () => {
       });
 
       expect(res.status).toBe(200);
+      expect(res.body.data.user.fullName).toBe("Signin Test");
       expect(res.body.data.accessToken).toBeDefined();
       expect(res.body.data.user.role).toBe("admin");
+      expect(res.body.data.user.mustChangePassword).toBe(false);
 
       const cookie = res.headers["set-cookie"]?.[0];
       expect(cookie).toMatch(/refreshToken=/);
@@ -314,6 +353,186 @@ describe("Auth routes", () => {
       const res = await request(app).post("/api/v1/auth/signout");
       expect(res.status).toBe(200);
       expect(res.headers["set-cookie"]?.[0]).toMatch(/refreshToken=;/);
+    });
+  });
+
+  describe("PATCH /api/v1/auth/change-password", () => {
+    let changePwUserId: string;
+    let changePwToken: string;
+
+    beforeAll(async () => {
+      const user = await prisma.user.create({
+        data: {
+          fullName: "Change Password Test",
+          username: CHANGE_PW_USERNAME,
+          email: CHANGE_PW_EMAIL,
+          password: await bcrypt.hash(CHANGE_PW_CURRENT, 10),
+          role: "admin",
+          mustChangePassword: true, // mirrors the invited-member flow
+        },
+      });
+      changePwUserId = user.id;
+
+      changePwToken = jwt.sign(
+        {
+          userId: user.id,
+          email: user.email,
+          username: user.username,
+          fullName: user.fullName,
+          role: user.role,
+        },
+        process.env.JWT_ACCESS_SECRET!,
+        { expiresIn: "15m" },
+      );
+    });
+
+    it("returns 401 with no access token", async () => {
+      const res = await request(app)
+        .patch("/api/v1/auth/change-password")
+        .send({
+          currentPassword: CHANGE_PW_CURRENT,
+          newPassword: "NewPassword1!",
+        });
+
+      expect(res.status).toBe(401);
+    });
+
+    it("returns 400 when newPassword is weak", async () => {
+      const res = await request(app)
+        .patch("/api/v1/auth/change-password")
+        .set("Authorization", `Bearer ${changePwToken}`)
+        .send({ currentPassword: CHANGE_PW_CURRENT, newPassword: "weak" });
+
+      expect(res.status).toBe(400);
+    });
+
+    it("returns 400 when newPassword equals currentPassword", async () => {
+      const res = await request(app)
+        .patch("/api/v1/auth/change-password")
+        .set("Authorization", `Bearer ${changePwToken}`)
+        .send({
+          currentPassword: CHANGE_PW_CURRENT,
+          newPassword: CHANGE_PW_CURRENT,
+        });
+
+      expect(res.status).toBe(400);
+    });
+
+    it("returns 400 when currentPassword is missing", async () => {
+      const res = await request(app)
+        .patch("/api/v1/auth/change-password")
+        .set("Authorization", `Bearer ${changePwToken}`)
+        .send({ newPassword: "NewPassword1!" });
+
+      expect(res.status).toBe(400);
+    });
+
+    it("returns 401 when currentPassword is incorrect", async () => {
+      const res = await request(app)
+        .patch("/api/v1/auth/change-password")
+        .set("Authorization", `Bearer ${changePwToken}`)
+        .send({
+          currentPassword: "WrongPassword1!",
+          newPassword: "NewPassword1!",
+        });
+
+      expect(res.status).toBe(401);
+    });
+
+    it("changes the password, clears mustChangePassword, and old/new credentials swap validity", async () => {
+      const res = await request(app)
+        .patch("/api/v1/auth/change-password")
+        .set("Authorization", `Bearer ${changePwToken}`)
+        .send({
+          currentPassword: CHANGE_PW_CURRENT,
+          newPassword: "NewPassword1!",
+        });
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe("success");
+
+      const dbUser = await prisma.user.findUnique({
+        where: { id: changePwUserId },
+      });
+      expect(dbUser?.mustChangePassword).toBe(false);
+
+      const oldPasswordSignin = await request(app)
+        .post("/api/v1/auth/signin")
+        .send({
+          email: CHANGE_PW_EMAIL,
+          password: CHANGE_PW_CURRENT,
+        });
+      expect(oldPasswordSignin.status).toBe(401);
+
+      const newPasswordSignin = await request(app)
+        .post("/api/v1/auth/signin")
+        .send({
+          email: CHANGE_PW_EMAIL,
+          password: "NewPassword1!",
+        });
+      expect(newPasswordSignin.status).toBe(200);
+    });
+  });
+
+  describe("Password change revokes other sessions", () => {
+    beforeAll(async () => {
+      await prisma.user.create({
+        data: {
+          fullName: "Session Revoke Test",
+          username: SESSION_REVOKE_USERNAME,
+          email: SESSION_REVOKE_EMAIL,
+          password: await bcrypt.hash(SESSION_REVOKE_PASSWORD, 10),
+          role: "admin",
+          mustChangePassword: false,
+        },
+      });
+    });
+
+    it("keeps the current session valid but revokes other sessions after a password change", async () => {
+      // Sign in twice — two separate sessions/devices
+      const signinA = await request(app).post("/api/v1/auth/signin").send({
+        email: SESSION_REVOKE_EMAIL,
+        password: SESSION_REVOKE_PASSWORD,
+      });
+      const signinB = await request(app).post("/api/v1/auth/signin").send({
+        email: SESSION_REVOKE_EMAIL,
+        password: SESSION_REVOKE_PASSWORD,
+      });
+
+      const accessTokenA = signinA.body.data.accessToken;
+      const refreshCookieA = signinA.headers["set-cookie"]?.[0]!;
+      const refreshTokenA = refreshCookieA
+        .split("refreshToken=")[1]!
+        .split(";")[0]!;
+
+      const refreshCookieB = signinB.headers["set-cookie"]?.[0]!;
+      const refreshTokenB = refreshCookieB
+        .split("refreshToken=")[1]!
+        .split(";")[0]!;
+
+      // Change password using session A's access token + refresh cookie
+      const changeRes = await request(app)
+        .patch("/api/v1/auth/change-password")
+        .set("Authorization", `Bearer ${accessTokenA}`)
+        .set("Cookie", [`refreshToken=${refreshTokenA}`])
+        .send({
+          currentPassword: SESSION_REVOKE_PASSWORD,
+          newPassword: "NewPassword1!",
+        });
+
+      expect(changeRes.status).toBe(200);
+
+      // Session A should still be able to refresh
+      const refreshA = await request(app)
+        .post("/api/v1/auth/refresh")
+        .set("Cookie", [`refreshToken=${refreshTokenA}`]);
+      expect(refreshA.status).toBe(200);
+
+      // Session B should have been revoked
+      const refreshB = await request(app)
+        .post("/api/v1/auth/refresh")
+        .set("Cookie", [`refreshToken=${refreshTokenB}`]);
+      expect(refreshB.status).toBe(401);
     });
   });
 });
