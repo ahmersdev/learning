@@ -26,7 +26,7 @@ const router = Router();
  *       401:
  *         description: Unauthorized — missing or invalid access token
  *       403:
- *         description: Admin access required
+ *         description: Forbidden — admin access required
  */
 router.get("/", requireAuth, requireAdmin, generalLimiter, getAllUsers);
 

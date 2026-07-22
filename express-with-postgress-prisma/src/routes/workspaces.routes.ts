@@ -43,7 +43,7 @@ const router = Router();
  *       401:
  *         description: Unauthorized — missing or invalid access token
  *       403:
- *         description: Admin access required
+ *         description: Forbidden — admin access required
  */
 router.post(
   "/",
@@ -68,7 +68,7 @@ router.post(
  *       401:
  *         description: Unauthorized — missing or invalid access token
  *       403:
- *         description: Admin access required
+ *         description: Forbidden — admin access required
  */
 router.get("/", requireAuth, requireAdmin, generalLimiter, getWorkspace);
 
@@ -92,7 +92,7 @@ router.get("/", requireAuth, requireAdmin, generalLimiter, getWorkspace);
  *       401:
  *         description: Unauthorized — missing or invalid access token
  *       403:
- *         description: Admin access required
+ *         description: Forbidden — admin access required
  *       404:
  *         description: Workspace not found
  */
@@ -136,7 +136,7 @@ router.get(
  *       401:
  *         description: Unauthorized — missing or invalid access token
  *       403:
- *         description: Admin access required
+ *         description: Forbidden — admin access required
  *       404:
  *         description: Workspace not found
  */
@@ -169,7 +169,7 @@ router.patch(
  *       401:
  *         description: Unauthorized — missing or invalid access token
  *       403:
- *         description: Admin access required
+ *         description: Forbidden — admin access required
  *       404:
  *         description: Workspace not found
  */
