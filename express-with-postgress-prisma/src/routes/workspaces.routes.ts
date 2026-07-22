@@ -14,6 +14,7 @@ import {
   workspacePostSchema,
 } from "../schemas/workspaces.schema.ts";
 import { requireAdmin } from "../middlewares/require-role.middleware.ts";
+import { validateUuid } from "../middlewares/validate-uuid.middleware.ts";
 
 const router = Router();
 
@@ -100,6 +101,7 @@ router.get(
   "/:workspaceId",
   requireAuth,
   requireAdmin,
+  validateUuid("workspaceId"),
   generalLimiter,
   getWorkspaceById,
 );
@@ -144,6 +146,7 @@ router.patch(
   "/:workspaceId",
   requireAuth,
   requireAdmin,
+  validateUuid("workspaceId"),
   generalLimiter,
   validate(workspacePatchSchema),
   patchWorkspaceById,
@@ -177,6 +180,7 @@ router.delete(
   "/:workspaceId",
   requireAuth,
   requireAdmin,
+  validateUuid("workspaceId"),
   generalLimiter,
   deleteWorkspaceById,
 );

@@ -16,6 +16,7 @@ import {
   workspaceMembersPatchSchema,
   workspaceMembersPostSchema,
 } from "../schemas/workspace-members.schema.ts";
+import { validateUuid } from "../middlewares/validate-uuid.middleware.ts";
 
 const router = Router();
 
@@ -57,6 +58,7 @@ const router = Router();
 router.post(
   "/:workspaceId/members",
   requireAuth,
+  validateUuid("workspaceId"),
   generalLimiter,
   validate(workspaceMembersPostSchema),
   postWorkspaceMembers,
@@ -86,6 +88,7 @@ router.post(
 router.get(
   "/:workspaceId/members",
   requireAuth,
+  validateUuid("workspaceId"),
   generalLimiter,
   getWorkspaceMembers,
 );
@@ -130,6 +133,7 @@ router.get(
 router.patch(
   "/:workspaceId/members/:userId",
   requireAuth,
+  validateUuid("workspaceId", "userId"),
   generalLimiter,
   validate(workspaceMembersPatchSchema),
   patchWorkspaceMembersById,
@@ -165,11 +169,10 @@ router.patch(
 router.delete(
   "/:workspaceId/members/:userId",
   requireAuth,
+  validateUuid("workspaceId", "userId"),
   generalLimiter,
   deleteWorkspaceMembersById,
 );
-
-export default router;
 
 /**
  * @openapi
@@ -205,6 +208,9 @@ export default router;
 router.post(
   "/:workspaceId/members/:userId/reset-password",
   requireAuth,
+  validateUuid("workspaceId", "userId"),
   authLimiter,
   resetMemberPassword,
 );
+
+export default router;

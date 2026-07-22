@@ -10,4 +10,5 @@ model Workspace {
   @@index([ownerId])
 
   members WorkspaceMember[]
+  projects Project[]
 }

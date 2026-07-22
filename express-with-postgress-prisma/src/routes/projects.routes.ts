@@ -13,6 +13,7 @@ import {
   projectPatchSchema,
   projectPostSchema,
 } from "../schemas/projects.schema.ts";
+import { validateUuid } from "../middlewares/validate-uuid.middleware.ts";
 
 const router = Router();
 
@@ -52,6 +53,7 @@ const router = Router();
 router.post(
   "/:workspaceId/projects",
   requireAuth,
+  validateUuid("workspaceId"),
   generalLimiter,
   validate(projectPostSchema),
   postProject,
@@ -78,7 +80,13 @@ router.post(
  *       404:
  *         description: Workspace not found
  */
-router.get("/:workspaceId/projects", requireAuth, generalLimiter, getProjects);
+router.get(
+  "/:workspaceId/projects",
+  requireAuth,
+  validateUuid("workspaceId"),
+  generalLimiter,
+  getProjects,
+);
 
 /**
  * @openapi
@@ -108,6 +116,7 @@ router.get("/:workspaceId/projects", requireAuth, generalLimiter, getProjects);
 router.get(
   "/:workspaceId/projects/:projectId",
   requireAuth,
+  validateUuid("workspaceId", "projectId"),
   generalLimiter,
   getProjectById,
 );
@@ -152,6 +161,7 @@ router.get(
 router.patch(
   "/:workspaceId/projects/:projectId",
   requireAuth,
+  validateUuid("workspaceId", "projectId"),
   generalLimiter,
   validate(projectPatchSchema),
   patchProjectById,
@@ -185,6 +195,7 @@ router.patch(
 router.delete(
   "/:workspaceId/projects/:projectId",
   requireAuth,
+  validateUuid("workspaceId", "projectId"),
   generalLimiter,
   deleteProjectById,
 );

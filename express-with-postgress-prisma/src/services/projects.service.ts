@@ -1,22 +1,21 @@
-import crypto from "crypto";
+import { prisma } from "../config/db.ts";
+import { NotFoundError } from "../utils/app-errors.ts";
 import type {
   ProjectPostInput,
   ProjectPatchInput,
 } from "../schemas/projects.schema.ts";
-import { AppError } from "../utils/app-errors.ts";
-
-// TODO: once DB is wired up:
-// - assertIsWorkspaceMember should verify the user actually belongs to this
-//   workspace (throw AppError 404 "Workspace not found" if not — avoids
-//   leaking existence of workspaces the user isn't part of)
-// - all functions should perform real queries/writes scoped to workspaceId
 
 export const assertIsWorkspaceMember = async (
   workspaceId: string,
   userId: string,
 ): Promise<void> => {
-  // TODO: check membership; for now stub every requester as a valid member
-  return;
+  const membership = await prisma.workspaceMember.findUnique({
+    where: { workspaceId_userId: { workspaceId, userId } },
+  });
+
+  if (!membership) {
+    throw new NotFoundError("Workspace not found");
+  }
 };
 
 export const postProjectService = async (
@@ -25,39 +24,31 @@ export const postProjectService = async (
 ) => {
   const { name, description } = projectData;
 
-  return {
-    id: crypto.randomUUID(),
-    workspaceId,
-    name,
-    description: description ?? null,
-  };
+  return prisma.project.create({
+    data: { workspaceId, name, description: description ?? null },
+  });
 };
 
 export const getProjectsService = async (workspaceId: string) => {
-  // TODO: return all projects where workspaceId matches
-  return [
-    {
-      id: crypto.randomUUID(),
-      workspaceId,
-      name: "Stub Project",
-      description: null,
-    },
-  ];
+  return prisma.project.findMany({
+    where: { workspaceId },
+    orderBy: { createdAt: "desc" },
+  });
 };
 
 export const getProjectByIdService = async (
   workspaceId: string,
   projectId: string,
 ) => {
-  // TODO: find project by id -> if not found OR not in this workspace,
-  // throw new AppError("Project not found", 404)
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, workspaceId },
+  });
 
-  return {
-    id: projectId,
-    workspaceId,
-    name: "Stub Project",
-    description: null,
-  };
+  if (!project) {
+    throw new NotFoundError("Project not found");
+  }
+
+  return project;
 };
 
 export const patchProjectByIdService = async (
@@ -65,25 +56,27 @@ export const patchProjectByIdService = async (
   projectId: string,
   updates: ProjectPatchInput,
 ) => {
-  // TODO: find project by id -> if not found OR not in this workspace,
-  // throw new AppError("Project not found", 404)
-  // apply updates, save
+  const { count } = await prisma.project.updateMany({
+    where: { id: projectId, workspaceId },
+    data: updates,
+  });
 
-  return {
-    id: projectId,
-    workspaceId,
-    name: updates.name ?? "Stub Project",
-    description: updates.description ?? null,
-  };
+  if (count === 0) {
+    throw new NotFoundError("Project not found");
+  }
+
+  return prisma.project.findUniqueOrThrow({ where: { id: projectId } });
 };
 
 export const deleteProjectByIdService = async (
   workspaceId: string,
   projectId: string,
 ) => {
-  // TODO: find project by id -> if not found OR not in this workspace,
-  // throw new AppError("Project not found", 404)
-  // delete from DB
+  const { count } = await prisma.project.deleteMany({
+    where: { id: projectId, workspaceId },
+  });
 
-  return;
+  if (count === 0) {
+    throw new NotFoundError("Project not found");
+  }
 };
