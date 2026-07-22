@@ -77,8 +77,6 @@ export const createUserService = async (
         username,
         email,
         password: hashedPassword,
-        role: "user",
-        mustChangePassword: false,
       },
     });
   } catch (error) {
@@ -101,6 +99,7 @@ export const createUserService = async (
       fullName: user.fullName,
       username: user.username,
       email: user.email,
+      role: user.role,
     },
     accessToken,
     refreshToken,
@@ -133,7 +132,7 @@ export const signinService = async (
   );
 
   return {
-    user: { username: user.username, email: user.email },
+    user: { username: user.username, email: user.email, role: user.role },
     accessToken,
     refreshToken,
   };

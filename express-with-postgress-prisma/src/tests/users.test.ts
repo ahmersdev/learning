@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "@jest/globals";
 import request from "supertest";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 import app from "../app.ts";
 import { prisma } from "../config/db.ts";
 
@@ -11,15 +12,21 @@ const PRIMARY_USERNAME = "usersprimary";
 const TAKEN_EMAIL = "users-taken@example.com";
 const TAKEN_USERNAME = "userstaken";
 
+const ADMIN_EMAIL = "users-admin@example.com";
+const ADMIN_USERNAME = "usersadmin";
+
 let primaryUserId: string;
 let validAccessToken: string;
+let adminAccessToken: string;
 
 const cleanup = () =>
   prisma.user.deleteMany({
     where: {
       OR: [
-        { email: { in: [PRIMARY_EMAIL, TAKEN_EMAIL] } },
-        { username: { in: [PRIMARY_USERNAME, TAKEN_USERNAME] } },
+        { email: { in: [PRIMARY_EMAIL, TAKEN_EMAIL, ADMIN_EMAIL] } },
+        {
+          username: { in: [PRIMARY_USERNAME, TAKEN_USERNAME, ADMIN_USERNAME] },
+        },
       ],
     },
   });
@@ -51,6 +58,17 @@ describe("User routes", () => {
       },
     });
 
+    const adminUser = await prisma.user.create({
+      data: {
+        fullName: "Admin User",
+        username: ADMIN_USERNAME,
+        email: ADMIN_EMAIL,
+        password: await bcrypt.hash("Password1!", 10),
+        role: "admin",
+        mustChangePassword: false,
+      },
+    });
+
     validAccessToken = jwt.sign(
       {
         userId: primaryUser.id,
@@ -58,6 +76,18 @@ describe("User routes", () => {
         username: primaryUser.username,
         fullName: primaryUser.fullName,
         role: primaryUser.role,
+      },
+      process.env.JWT_ACCESS_SECRET!,
+      { expiresIn: "15m" },
+    );
+
+    adminAccessToken = jwt.sign(
+      {
+        userId: adminUser.id,
+        email: adminUser.email,
+        username: adminUser.username,
+        fullName: adminUser.fullName,
+        role: adminUser.role,
       },
       process.env.JWT_ACCESS_SECRET!,
       { expiresIn: "15m" },
@@ -111,7 +141,7 @@ describe("User routes", () => {
       expect(res.status).toBe(404);
     });
 
-    it("returns the real user profile from the DB with a valid access token", async () => {
+    it("returns the real user profile from the DB, including role, with a valid access token", async () => {
       const res = await request(app)
         .get("/api/v1/users/me")
         .set("Authorization", `Bearer ${validAccessToken}`);
@@ -120,6 +150,7 @@ describe("User routes", () => {
       expect(res.body.data.user.id).toBe(primaryUserId);
       expect(res.body.data.user.username).toBe(PRIMARY_USERNAME);
       expect(res.body.data.user.email).toBe(PRIMARY_EMAIL);
+      expect(res.body.data.user.role).toBe("user");
       expect(res.body.data.user.password).toBeUndefined();
     });
   });
@@ -169,7 +200,7 @@ describe("User routes", () => {
       expect(res.status).toBe(409);
     });
 
-    it("updates fullName only, persisted in the DB", async () => {
+    it("updates fullName only, persisted in the DB, and still returns role", async () => {
       const res = await request(app)
         .patch("/api/v1/users/me")
         .set("Authorization", `Bearer ${validAccessToken}`)
@@ -177,6 +208,7 @@ describe("User routes", () => {
 
       expect(res.status).toBe(200);
       expect(res.body.data.user.fullName).toBe("Updated Name");
+      expect(res.body.data.user.role).toBe("user");
 
       const dbUser = await prisma.user.findUnique({
         where: { id: primaryUserId },
@@ -197,6 +229,41 @@ describe("User routes", () => {
         where: { id: primaryUserId },
       });
       expect(dbUser?.username).toBe("primaryrenamed");
+    });
+  });
+
+  describe("GET /api/v1/users (admin only)", () => {
+    it("returns 401 with no access token", async () => {
+      const res = await request(app).get("/api/v1/users");
+      expect(res.status).toBe(401);
+    });
+
+    it("returns 403 for a non-admin user", async () => {
+      const res = await request(app)
+        .get("/api/v1/users")
+        .set("Authorization", `Bearer ${validAccessToken}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it("returns all users for an admin, excluding passwords", async () => {
+      const res = await request(app)
+        .get("/api/v1/users")
+        .set("Authorization", `Bearer ${adminAccessToken}`);
+
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body.data.users)).toBe(true);
+      expect(res.body.data.users.length).toBeGreaterThanOrEqual(3);
+
+      const emails = res.body.data.users.map((u: { email: string }) => u.email);
+      expect(emails).toEqual(
+        expect.arrayContaining([PRIMARY_EMAIL, TAKEN_EMAIL, ADMIN_EMAIL]),
+      );
+
+      res.body.data.users.forEach((user: Record<string, unknown>) => {
+        expect(user.password).toBeUndefined();
+        expect(user.role).toBeDefined();
+      });
     });
   });
 });

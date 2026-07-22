@@ -8,6 +8,25 @@ const PUBLIC_USER_FIELDS = {
   fullName: true,
   username: true,
   email: true,
+  role: true,
+};
+
+const ADMIN_USER_FIELDS = {
+  id: true,
+  fullName: true,
+  username: true,
+  email: true,
+  role: true,
+  mustChangePassword: true,
+  createdAt: true,
+  updatedAt: true,
+};
+
+export const getAllUsersService = async () => {
+  return prisma.user.findMany({
+    select: ADMIN_USER_FIELDS,
+    orderBy: { createdAt: "desc" },
+  });
 };
 
 export const getUserService = async (userId: string) => {

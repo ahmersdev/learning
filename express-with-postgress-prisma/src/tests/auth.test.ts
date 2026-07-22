@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "@jest/globals";
 import request from "supertest";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 import app from "../app.ts";
 import { prisma } from "../config/db.ts";
 
@@ -18,13 +19,22 @@ const REFRESH_USERNAME = "refreshtestuser";
 const SIGNOUT_EMAIL = "signout-test@example.com";
 const SIGNOUT_USERNAME = "signouttestuser";
 
-// deleting these users cascades and deletes their sessions too
-const ALL_EMAILS = [SIGNUP_EMAIL, SIGNIN_EMAIL, REFRESH_EMAIL, SIGNOUT_EMAIL];
+const ROLE_CHECK_EMAIL = "role-check@example.com";
+const ROLE_CHECK_USERNAME = "rolecheckuser";
+
+const ALL_EMAILS = [
+  SIGNUP_EMAIL,
+  SIGNIN_EMAIL,
+  REFRESH_EMAIL,
+  SIGNOUT_EMAIL,
+  ROLE_CHECK_EMAIL,
+];
 const ALL_USERNAMES = [
   SIGNUP_USERNAME,
   SIGNIN_USERNAME,
   REFRESH_USERNAME,
   SIGNOUT_USERNAME,
+  ROLE_CHECK_USERNAME,
 ];
 
 const cleanup = () =>
@@ -69,6 +79,38 @@ describe("Auth routes", () => {
       expect(session).not.toBeNull();
     });
 
+    it("returns the user's role in the response body", async () => {
+      const res = await request(app).post("/api/v1/auth/signup").send({
+        fullName: "Role Body Check",
+        username: "rolebodycheck",
+        email: "role-body-check@example.com",
+        password: "Password1!",
+      });
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.user.role).toBe("admin");
+
+      await prisma.user.delete({
+        where: { email: "role-body-check@example.com" },
+      });
+    });
+
+    it("defaults a new user's role to admin", async () => {
+      const res = await request(app).post("/api/v1/auth/signup").send({
+        fullName: "Role Check",
+        username: ROLE_CHECK_USERNAME,
+        email: ROLE_CHECK_EMAIL,
+        password: "Password1!",
+      });
+
+      expect(res.status).toBe(201);
+
+      const dbUser = await prisma.user.findUnique({
+        where: { email: ROLE_CHECK_EMAIL },
+      });
+      expect(dbUser?.role).toBe("admin");
+    });
+
     it("rejects weak password", async () => {
       const res = await request(app).post("/api/v1/auth/signup").send({
         fullName: "Weak Pw",
@@ -102,13 +144,13 @@ describe("Auth routes", () => {
           username: SIGNIN_USERNAME,
           email: SIGNIN_EMAIL,
           password: hashedPassword,
-          role: "user",
+          role: "admin",
           mustChangePassword: false,
         },
       });
     });
 
-    it("signs in, sets refreshToken cookie, and creates a session", async () => {
+    it("signs in, sets refreshToken cookie, creates a session, and returns role", async () => {
       const res = await request(app).post("/api/v1/auth/signin").send({
         email: SIGNIN_EMAIL,
         password: SIGNIN_PASSWORD,
@@ -116,6 +158,7 @@ describe("Auth routes", () => {
 
       expect(res.status).toBe(200);
       expect(res.body.data.accessToken).toBeDefined();
+      expect(res.body.data.user.role).toBe("admin");
 
       const cookie = res.headers["set-cookie"]?.[0];
       expect(cookie).toMatch(/refreshToken=/);
@@ -160,7 +203,7 @@ describe("Auth routes", () => {
           username: REFRESH_USERNAME,
           email: REFRESH_EMAIL,
           password: await bcrypt.hash("Password1!", 10),
-          role: "user",
+          role: "admin",
           mustChangePassword: false,
         },
       });
@@ -197,7 +240,6 @@ describe("Auth routes", () => {
         },
       });
 
-      // simulate the session being revoked/deleted server-side
       await prisma.session.delete({ where: { tokenId } });
 
       const validSignatureToken = jwt.sign(
@@ -241,14 +283,14 @@ describe("Auth routes", () => {
 
   describe("POST /api/v1/auth/signout", () => {
     it("clears the refreshToken cookie and deletes the session", async () => {
-      const signinRes = await request(app).post("/api/v1/auth/signup").send({
+      const signupRes = await request(app).post("/api/v1/auth/signup").send({
         fullName: "Signout Test",
         username: SIGNOUT_USERNAME,
         email: SIGNOUT_EMAIL,
         password: "Password1!",
       });
 
-      const cookie = signinRes.headers["set-cookie"]?.[0]!;
+      const cookie = signupRes.headers["set-cookie"]?.[0]!;
       const refreshToken = cookie.split("refreshToken=")[1]!.split(";")[0]!;
       const decoded = jwt.verify(
         refreshToken,

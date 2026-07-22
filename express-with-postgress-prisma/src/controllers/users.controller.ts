@@ -1,7 +1,32 @@
 import { type Request, type Response, type NextFunction } from "express";
 import type { UserUpdateInput } from "../schemas/users.schema.ts";
 import { AppError } from "../utils/app-errors.ts";
-import { getUserService, updateUserService } from "../services/users.service.ts";
+import {
+  getAllUsersService,
+  getUserService,
+  updateUserService,
+} from "../services/users.service.ts";
+
+export const getAllUsers = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
+  try {
+    if (!req.user) {
+      throw new AppError("Unauthorized", 401);
+    }
+
+    const users = await getAllUsersService();
+
+    return res.status(200).json({
+      status: "success",
+      data: { users },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 export const getUser = async (
   req: Request,

@@ -11,6 +11,10 @@ const OWNER_USERNAME = "workspacesowner";
 const OTHER_EMAIL = "workspaces-other@example.com";
 const OTHER_USERNAME = "workspacesother";
 
+const NON_ADMIN_EMAIL = "workspaces-nonadmin@example.com";
+const NON_ADMIN_USERNAME = "workspacesnonadmin";
+
+let nonAdminToken: string;
 let ownerId: string;
 let ownerToken: string;
 let otherToken: string;
@@ -19,8 +23,12 @@ const cleanup = () =>
   prisma.user.deleteMany({
     where: {
       OR: [
-        { email: { in: [OWNER_EMAIL, OTHER_EMAIL] } },
-        { username: { in: [OWNER_USERNAME, OTHER_USERNAME] } },
+        { email: { in: [OWNER_EMAIL, OTHER_EMAIL, NON_ADMIN_EMAIL] } },
+        {
+          username: {
+            in: [OWNER_USERNAME, OTHER_USERNAME, NON_ADMIN_USERNAME],
+          },
+        },
       ],
     },
   });
@@ -35,7 +43,7 @@ describe("Workspace routes", () => {
         username: OWNER_USERNAME,
         email: OWNER_EMAIL,
         password: await bcrypt.hash("Password1!", 10),
-        role: "user",
+        role: "admin",
         mustChangePassword: false,
       },
     });
@@ -47,7 +55,18 @@ describe("Workspace routes", () => {
         username: OTHER_USERNAME,
         email: OTHER_EMAIL,
         password: await bcrypt.hash("Password1!", 10),
-        role: "user",
+        role: "admin",
+        mustChangePassword: false,
+      },
+    });
+
+    const nonAdmin = await prisma.user.create({
+      data: {
+        fullName: "Non Admin",
+        username: NON_ADMIN_USERNAME,
+        email: NON_ADMIN_EMAIL,
+        password: await bcrypt.hash("Password1!", 10),
+        role: "user", // explicitly non-admin — no signup flow produces this anymore
         mustChangePassword: false,
       },
     });
@@ -75,11 +94,79 @@ describe("Workspace routes", () => {
       process.env.JWT_ACCESS_SECRET!,
       { expiresIn: "15m" },
     );
+
+    nonAdminToken = jwt.sign(
+      {
+        userId: nonAdmin.id,
+        email: nonAdmin.email,
+        username: nonAdmin.username,
+        fullName: nonAdmin.fullName,
+        role: nonAdmin.role,
+      },
+      process.env.JWT_ACCESS_SECRET!,
+      { expiresIn: "15m" },
+    );
   });
 
   afterAll(async () => {
     await cleanup();
     await prisma.$disconnect();
+  });
+
+  describe("Admin-only access", () => {
+    it("returns 403 on POST for a non-admin user", async () => {
+      const res = await request(app)
+        .post("/api/v1/workspaces")
+        .set("Authorization", `Bearer ${nonAdminToken}`)
+        .send({ name: "Should Not Be Created" });
+
+      expect(res.status).toBe(403);
+    });
+
+    it("returns 403 on GET list for a non-admin user", async () => {
+      const res = await request(app)
+        .get("/api/v1/workspaces")
+        .set("Authorization", `Bearer ${nonAdminToken}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it("returns 403 on GET by id for a non-admin user", async () => {
+      const workspace = await prisma.workspace.create({
+        data: { name: "Admin Only Workspace", ownerId },
+      });
+
+      const res = await request(app)
+        .get(`/api/v1/workspaces/${workspace.id}`)
+        .set("Authorization", `Bearer ${nonAdminToken}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it("returns 403 on PATCH for a non-admin user", async () => {
+      const workspace = await prisma.workspace.create({
+        data: { name: "Admin Only Workspace", ownerId },
+      });
+
+      const res = await request(app)
+        .patch(`/api/v1/workspaces/${workspace.id}`)
+        .set("Authorization", `Bearer ${nonAdminToken}`)
+        .send({ name: "Hijacked" });
+
+      expect(res.status).toBe(403);
+    });
+
+    it("returns 403 on DELETE for a non-admin user", async () => {
+      const workspace = await prisma.workspace.create({
+        data: { name: "Admin Only Workspace", ownerId },
+      });
+
+      const res = await request(app)
+        .delete(`/api/v1/workspaces/${workspace.id}`)
+        .set("Authorization", `Bearer ${nonAdminToken}`);
+
+      expect(res.status).toBe(403);
+    });
   });
 
   describe("POST /api/v1/workspaces", () => {

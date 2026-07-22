@@ -3,9 +3,32 @@ import { requireAuth } from "../middlewares/auth.middleware.ts";
 import { validate } from "../middlewares/validate.middleware.ts";
 import { generalLimiter } from "../middlewares/rate-limiter.middleware.ts";
 import { userSchema } from "../schemas/users.schema.ts";
-import { getUser, patchUser } from "../controllers/users.controller.ts";
+import {
+  getAllUsers,
+  getUser,
+  patchUser,
+} from "../controllers/users.controller.ts";
+import { requireAdmin } from "../middlewares/require-role.middleware.ts";
 
 const router = Router();
+
+/**
+ * @openapi
+ * /users:
+ *   get:
+ *     summary: List all users (admin only)
+ *     tags: [Users]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: List of all users retrieved successfully
+ *       401:
+ *         description: Unauthorized — missing or invalid access token
+ *       403:
+ *         description: Admin access required
+ */
+router.get("/", requireAuth, requireAdmin, generalLimiter, getAllUsers);
 
 /**
  * @openapi
