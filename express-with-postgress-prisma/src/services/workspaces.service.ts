@@ -1,12 +1,9 @@
-import crypto from "crypto";
+import { prisma } from "../config/db.ts";
+import { NotFoundError } from "../utils/app-errors.ts";
 import type {
   WorkspacePostInput,
   WorkspacePatchInput,
 } from "../schemas/workspaces.schema.ts";
-
-// TODO: once DB is wired up, replace all of this with real queries scoped
-// to ownerId, including ownership checks (404, not 403, if not owned —
-// avoids leaking existence of other users' workspaces)
 
 export const postWorkspaceService = async (
   ownerId: string,
@@ -14,39 +11,31 @@ export const postWorkspaceService = async (
 ) => {
   const { name, description } = workspaceData;
 
-  return {
-    id: crypto.randomUUID(),
-    ownerId,
-    name,
-    description: description ?? null,
-  };
+  return prisma.workspace.create({
+    data: { name, description: description ?? null, ownerId },
+  });
 };
 
 export const getWorkspacesService = async (ownerId: string) => {
-  // TODO: return all workspaces where ownerId matches
-  return [
-    {
-      id: crypto.randomUUID(),
-      ownerId,
-      name: "Stub Workspace",
-      description: null,
-    },
-  ];
+  return prisma.workspace.findMany({
+    where: { ownerId },
+    orderBy: { createdAt: "desc" },
+  });
 };
 
 export const getWorkspaceByIdService = async (
   ownerId: string,
   workspaceId: string,
 ) => {
-  // TODO: find workspace by id -> if not found OR not owned by ownerId,
-  // throw new AppError("Workspace not found", 404)
+  const workspace = await prisma.workspace.findFirst({
+    where: { id: workspaceId, ownerId },
+  });
 
-  return {
-    id: workspaceId,
-    ownerId,
-    name: "Stub Workspace",
-    description: null,
-  };
+  if (!workspace) {
+    throw new NotFoundError("Workspace not found");
+  }
+
+  return workspace;
 };
 
 export const patchWorkspaceByIdService = async (
@@ -54,25 +43,27 @@ export const patchWorkspaceByIdService = async (
   workspaceId: string,
   updates: WorkspacePatchInput,
 ) => {
-  // TODO: find workspace by id -> if not found OR not owned by ownerId,
-  // throw new AppError("Workspace not found", 404)
-  // apply updates, save
+  const { count } = await prisma.workspace.updateMany({
+    where: { id: workspaceId, ownerId },
+    data: updates,
+  });
 
-  return {
-    id: workspaceId,
-    ownerId,
-    name: updates.name ?? "Stub Workspace",
-    description: updates.description ?? null,
-  };
+  if (count === 0) {
+    throw new NotFoundError("Workspace not found");
+  }
+
+  return prisma.workspace.findUniqueOrThrow({ where: { id: workspaceId } });
 };
 
 export const deleteWorkspaceByIdService = async (
   ownerId: string,
   workspaceId: string,
 ) => {
-  // TODO: find workspace by id -> if not found OR not owned by ownerId,
-  // throw new AppError("Workspace not found", 404)
-  // delete from DB
+  const { count } = await prisma.workspace.deleteMany({
+    where: { id: workspaceId, ownerId },
+  });
 
-  return;
+  if (count === 0) {
+    throw new NotFoundError("Workspace not found");
+  }
 };
