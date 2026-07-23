@@ -1,5 +1,5 @@
 {
-  "name": "express-with-mongo",
+  "name": "base-structure-for-express",
   "version": "1.0.0",
   "description": "",
   "main": "src/server.ts",
