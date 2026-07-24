@@ -1,26 +1,44 @@
-import { Injectable } from '@nestjs/common';
-import { CreateUserDto } from './dto/create-user.dto';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { UpdateUserDto } from './dto/update-user.dto';
+
+export interface UserProfile {
+  id: string;
+  fullName: string;
+  username: string;
+  email: string;
+}
 
 @Injectable()
 export class UsersService {
-  create(createUserDto: CreateUserDto) {
-    return 'This action adds a new user';
+  async getUser(userId: string): Promise<UserProfile> {
+    // TODO: find user by id in DB -> if not found, throw new NotFoundException("User not found")
+
+    return {
+      id: userId,
+      fullName: 'Stub User',
+      username: 'stubuser',
+      email: 'stub@example.com',
+    };
   }
 
-  findAll() {
-    return `This action returns all users`;
-  }
+  async updateUser(userId: string, updates: UpdateUserDto) {
+    if (updates.fullName === undefined && updates.username === undefined) {
+      throw new BadRequestException(
+        'At least one field (fullName or username) must be provided',
+      );
+    }
 
-  findOne(id: number) {
-    return `This action returns a #${id} user`;
-  }
+    // TODO: find user by id, apply updates, save to DB
+    // if user not found -> throw new NotFoundException("User not found")
 
-  update(id: number, updateUserDto: UpdateUserDto) {
-    return `This action updates a #${id} user`;
-  }
-
-  remove(id: number) {
-    return `This action removes a #${id} user`;
+    return {
+      id: userId,
+      fullName: updates.fullName ?? 'Stub User',
+      username: updates.username ?? 'stubuser',
+    };
   }
 }
