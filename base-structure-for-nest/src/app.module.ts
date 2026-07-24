@@ -9,6 +9,7 @@ import { CustomThrottlerGuard } from './common/guards/custom-throttler.guard';
 import { UsersModule } from './users/users.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { WorkspaceMembersModule } from './workspace-members/workspace-members.module';
+import { ProjectsModule } from './projects/projects.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { WorkspaceMembersModule } from './workspace-members/workspace-members.mo
     UsersModule,
     WorkspacesModule,
     WorkspaceMembersModule,
+    ProjectsModule,
   ],
   controllers: [AppController],
   providers: [
