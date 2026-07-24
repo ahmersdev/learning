@@ -7,6 +7,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CustomThrottlerGuard } from './common/guards/custom-throttler.guard';
 import { UsersModule } from './users/users.module';
+import { WorkspacesModule } from './workspaces/workspaces.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { UsersModule } from './users/users.module';
     ]),
     AuthModule,
     UsersModule,
+    WorkspacesModule,
   ],
   controllers: [AppController],
   providers: [
