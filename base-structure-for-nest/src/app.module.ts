@@ -6,6 +6,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CustomThrottlerGuard } from './common/guards/custom-throttler.guard';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { CustomThrottlerGuard } from './common/guards/custom-throttler.guard';
       },
     ]),
     AuthModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [
