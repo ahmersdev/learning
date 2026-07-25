@@ -18,9 +18,13 @@ const SALT_ROUNDS = 10;
 interface AccessTokenPayload {
   userId: string;
   email: string;
+  username: string;
+  fullName: string;
 }
 
-interface RefreshTokenPayload extends AccessTokenPayload {
+interface RefreshTokenPayload {
+  userId: string;
+  email: string;
   tokenId: string;
 }
 
@@ -80,7 +84,9 @@ export class AuthService {
    * Creates a session row and signs both tokens off the same tokenId,
    * so a refresh token is only ever valid while its session row exists.
    */
-  private async issueTokens(user: Pick<User, 'id' | 'email'>) {
+  private async issueTokens(
+    user: Pick<User, 'id' | 'email' | 'username' | 'fullName'>,
+  ) {
     const tokenId = randomUUID();
     const refreshExpiry = this.configService.get<string>(
       'JWT_REFRESH_EXPIRY',
@@ -97,6 +103,8 @@ export class AuthService {
     const accessToken = await this.generateAccessToken({
       userId: user.id,
       email: user.email,
+      username: user.username,
+      fullName: user.fullName,
     });
     const refreshToken = await this.generateRefreshToken({
       userId: user.id,
@@ -190,15 +198,17 @@ export class AuthService {
       throw new UnauthorizedException('Session expired or revoked');
     }
 
-    // Rotate: kill the old session row, issue a fresh tokenId + tokens.
-    await this.prisma.session.delete({ where: { id: session.id } });
-
-    const { accessToken, refreshToken } = await this.issueTokens({
-      id: decoded.userId,
-      email: decoded.email,
+    const user = await this.prisma.user.findUnique({
+      where: { id: decoded.userId },
     });
 
-    return { accessToken, refreshToken };
+    if (!user) {
+      throw new UnauthorizedException('User no longer exists');
+    }
+
+    await this.prisma.session.delete({ where: { id: session.id } });
+
+    return this.issueTokens(user);
   }
 
   async signout(token: string | undefined) {
