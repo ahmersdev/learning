@@ -1,38 +1,32 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
-import { randomUUID } from 'crypto';
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '../generated/prisma/client';
 import { CreateWorkspaceMemberDto } from './dto/create-workspace-member.dto';
 import { UpdateWorkspaceMemberDto } from './dto/update-workspace-member.dto';
 import type { WorkspaceRole } from './workspace-members-role';
 
-export interface WorkspaceMember {
-  id: string;
-  workspaceId: string;
-  email: string;
-  role: WorkspaceRole;
-}
-
 @Injectable()
 export class WorkspaceMembersService {
-  // TODO: once DB is wired up:
-  // - getRequesterRole should look up the requesting user's actual role
-  //   in this workspace (throw NotFoundException if they aren't a member at all)
-  // - all other methods should perform real membership queries/writes,
-  //   scoped to workspaceId
-  // - IMPORTANT: WorkspacesService.create() must insert the owner into
-  //   workspace_members with role 'admin' at creation time, in the same
-  //   transaction as the workspace insert — otherwise the owner has no
-  //   membership row and getRequesterRole will incorrectly treat them as
-  //   a non-member once real lookups replace this stub
+  constructor(private readonly prisma: PrismaService) {}
 
   async getRequesterRole(
     workspaceId: string,
     userId: string,
   ): Promise<WorkspaceRole> {
-    void workspaceId;
-    void userId;
-    // TODO: look up real role; for now stub every requester as admin
-    // so the rest of the flow can be exercised/tested
-    return 'admin';
+    const membership = await this.prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId } },
+    });
+
+    if (!membership) {
+      throw new NotFoundException('Workspace not found');
+    }
+
+    return membership.role;
   }
 
   private assertIsAdmin(role: WorkspaceRole) {
@@ -45,30 +39,34 @@ export class WorkspaceMembersService {
     requesterRole: WorkspaceRole,
     workspaceId: string,
     dto: CreateWorkspaceMemberDto,
-  ): Promise<WorkspaceMember> {
+  ) {
     this.assertIsAdmin(requesterRole);
 
-    // TODO: check if a user with this email exists and isn't already a member
-    // -> throw new ConflictException("User is already a member")
+    const targetUser = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
 
-    return {
-      id: randomUUID(),
-      workspaceId,
-      email: dto.email,
-      role: dto.role,
-    };
+    if (!targetUser) {
+      throw new NotFoundException('No user found with this email');
+    }
+
+    try {
+      return await this.prisma.workspaceMember.create({
+        data: { workspaceId, userId: targetUser.id, role: dto.role },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException('User is already a member');
+      }
+      throw error;
+    }
   }
 
-  async findAll(workspaceId: string): Promise<WorkspaceMember[]> {
-    // TODO: return all members where workspaceId matches
-    return [
-      {
-        id: randomUUID(),
-        workspaceId,
-        email: 'stub-member@example.com',
-        role: 'member',
-      },
-    ];
+  async findAll(workspaceId: string) {
+    return this.prisma.workspaceMember.findMany({ where: { workspaceId } });
   }
 
   async update(
@@ -76,32 +74,58 @@ export class WorkspaceMembersService {
     workspaceId: string,
     targetUserId: string,
     dto: UpdateWorkspaceMemberDto,
-  ): Promise<WorkspaceMember> {
+  ) {
     this.assertIsAdmin(requesterRole);
 
-    // TODO: find member by workspaceId + targetUserId -> if not found,
-    // throw new NotFoundException("Member not found")
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+    });
 
-    return {
-      id: targetUserId,
-      workspaceId,
-      email: 'stub-member@example.com',
-      role: dto.role,
-    };
+    if (workspace?.ownerId === targetUserId) {
+      throw new ForbiddenException(
+        "The workspace owner's role cannot be changed",
+      );
+    }
+
+    const membership = await this.prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: targetUserId } },
+    });
+
+    if (!membership) {
+      throw new NotFoundException('Member not found');
+    }
+
+    return this.prisma.workspaceMember.update({
+      where: { id: membership.id },
+      data: { role: dto.role },
+    });
   }
 
   async remove(
     requesterRole: WorkspaceRole,
     workspaceId: string,
     targetUserId: string,
-  ): Promise<void> {
+  ) {
     this.assertIsAdmin(requesterRole);
 
-    // TODO: find member by workspaceId + targetUserId -> if not found,
-    // throw new NotFoundException("Member not found")
-    // delete from DB
-    void workspaceId;
-    void targetUserId;
-    return;
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+    });
+
+    if (workspace?.ownerId === targetUserId) {
+      throw new ForbiddenException(
+        'The workspace owner cannot be removed from the workspace',
+      );
+    }
+
+    const membership = await this.prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: targetUserId } },
+    });
+
+    if (!membership) {
+      throw new NotFoundException('Member not found');
+    }
+
+    await this.prisma.workspaceMember.delete({ where: { id: membership.id } });
   }
 }

@@ -17,6 +17,9 @@ export class WorkspacesService {
         name: dto.name,
         description: dto.description ?? null,
         ownerId,
+        members: {
+          create: { userId: ownerId, role: 'admin' },
+        },
       },
     });
   }

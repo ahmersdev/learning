@@ -4,6 +4,7 @@ import { App } from 'supertest/types';
 import { randomUUID } from 'crypto';
 
 export interface TestUser {
+  id: string;
   accessToken: string;
   refreshTokenCookie: string;
   email: string;
@@ -33,6 +34,7 @@ export async function signupTestUser(
   }
 
   return {
+    id: res.body.data.user.id,
     accessToken: res.body.data.accessToken,
     refreshTokenCookie: res.headers['set-cookie'][0],
     email,

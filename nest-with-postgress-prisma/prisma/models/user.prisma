@@ -14,6 +14,7 @@ model User {
   lastLogin          DateTime?
   sessions           Session[]
   ownedWorkspaces    Workspace[]
+  workspaceMemberships WorkspaceMember[]
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 }

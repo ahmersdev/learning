@@ -65,9 +65,30 @@ describe('WorkspacesService', () => {
       const result = await service.create(ownerId, dto);
 
       expect(prisma.workspace.create).toHaveBeenCalledWith({
-        data: { name: dto.name, description: dto.description, ownerId },
+        data: {
+          name: dto.name,
+          description: dto.description,
+          ownerId,
+          members: { create: { userId: ownerId, role: 'admin' } },
+        },
       });
       expect(result).toEqual(mockWorkspace);
+    });
+
+    it('creates the owner as an admin member alongside the workspace', async () => {
+      const dto: CreateWorkspaceDto = { name: 'Marketing Team' };
+      prisma.workspace.create.mockResolvedValue(mockWorkspace);
+
+      await service.create(ownerId, dto);
+
+      expect(prisma.workspace.create).toHaveBeenCalledWith({
+        data: {
+          name: dto.name,
+          description: null,
+          ownerId,
+          members: { create: { userId: ownerId, role: 'admin' } },
+        },
+      });
     });
 
     it('defaults description to null when not provided', async () => {
@@ -80,7 +101,12 @@ describe('WorkspacesService', () => {
       await service.create(ownerId, dto);
 
       expect(prisma.workspace.create).toHaveBeenCalledWith({
-        data: { name: dto.name, description: null, ownerId },
+        data: {
+          name: dto.name,
+          description: null,
+          ownerId,
+          members: { create: { userId: ownerId, role: 'admin' } },
+        },
       });
     });
   });
