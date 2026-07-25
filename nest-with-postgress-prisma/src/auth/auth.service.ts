@@ -1,10 +1,15 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { randomUUID } from 'crypto';
+import { Prisma, type User } from '../generated/prisma/client';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { PrismaService } from '../prisma/prisma.service';
 
 const SALT_ROUNDS = 10;
 
@@ -16,6 +21,7 @@ interface JwtPayload {
 @Injectable()
 export class AuthService {
   constructor(
+    private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {}
@@ -44,57 +50,86 @@ export class AuthService {
     }
   }
 
+  private toSafeUser(user: User) {
+    const { password, ...safeUser } = user;
+    return safeUser;
+  }
+
   async register(dto: RegisterDto) {
     const { fullName, username, email, password } = dto;
 
+    const existingUser = await this.prisma.user.findFirst({
+      where: { OR: [{ email }, { username }] },
+    });
+
+    if (existingUser) {
+      throw new ConflictException(
+        'A user with this email or username already exists',
+      );
+    }
+
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
-    // TODO: once DB is wired up:
-    // 1. check if email/username already exists -> throw ConflictException("User already exists")
-    // 2. save { fullName, username, email, hashedPassword } to DB
-    // 3. use the real DB-generated user id below instead of this fake one
-
-    const fakeUserId = randomUUID();
+    let user: User;
+    try {
+      user = await this.prisma.user.create({
+        data: { fullName, username, email, password: hashedPassword },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          'A user with this email or username already exists',
+        );
+      }
+      throw error;
+    }
 
     const accessToken = await this.generateAccessToken({
-      userId: fakeUserId,
-      email,
+      userId: user.id,
+      email: user.email,
     });
     const refreshToken = await this.generateRefreshToken({
-      userId: fakeUserId,
-      email,
+      userId: user.id,
+      email: user.email,
     });
 
     return {
-      user: { fullName, username, email },
+      user: this.toSafeUser(user),
       accessToken,
       refreshToken,
     };
   }
 
   async login(dto: LoginDto) {
-    const { username, email } = dto;
+    const { username, email, password } = dto;
 
-    // TODO: once DB is wired up:
-    // 1. find user by email or username
-    // 2. if not found -> throw new UnauthorizedException("Invalid credentials")
-    // 3. const isMatch = await bcrypt.compare(dto.password, user.hashedPassword)
-    // 4. if (!isMatch) -> throw new UnauthorizedException("Invalid credentials")
+    const user = await this.prisma.user.findFirst({
+      where: { OR: [{ email }, { username }] },
+    });
 
-    const fakeUserId = randomUUID();
-    const resolvedEmail = email || 'stub@example.com';
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
 
     const accessToken = await this.generateAccessToken({
-      userId: fakeUserId,
-      email: resolvedEmail,
+      userId: user.id,
+      email: user.email,
     });
     const refreshToken = await this.generateRefreshToken({
-      userId: fakeUserId,
-      email: resolvedEmail,
+      userId: user.id,
+      email: user.email,
     });
 
     return {
-      user: { username, email: resolvedEmail },
+      user: this.toSafeUser(user),
       accessToken,
       refreshToken,
     };

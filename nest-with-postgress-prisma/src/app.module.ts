@@ -4,6 +4,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD, APP_FILTER } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
@@ -27,6 +28,7 @@ import { RequestLoggerMiddleware } from './common/middleware/request-logger.midd
         limit: 100,
       },
     ]),
+    PrismaModule,
     AuthModule,
     UsersModule,
     WorkspacesModule,

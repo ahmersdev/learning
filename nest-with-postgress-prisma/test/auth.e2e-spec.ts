@@ -24,17 +24,29 @@ describe('Auth (e2e)', () => {
 
   describe('POST /api/v1/auth/signup', () => {
     it('registers a user and returns 201 with accessToken + refreshToken cookie', async () => {
+      const uniqueBody = {
+        ...validSignupBody,
+        email: `signup-${Date.now()}@example.com`,
+        username: `signupuser${Date.now()}`,
+      };
+
       const res = await request(app.getHttpServer())
         .post('/api/v1/auth/signup')
-        .send(validSignupBody);
+        .send(uniqueBody);
 
       expect(res.status).toBe(201);
       expect(res.body.status).toBe('success');
-      expect(res.body.data.user).toEqual({
-        fullName: validSignupBody.fullName,
-        username: validSignupBody.username,
-        email: validSignupBody.email,
-      });
+      expect(res.body.data.user).toEqual(
+        expect.objectContaining({
+          fullName: uniqueBody.fullName,
+          username: uniqueBody.username,
+          email: uniqueBody.email,
+          role: 'user',
+          mustChangePassword: false,
+        }),
+      );
+      expect(res.body.data.user.id).toEqual(expect.any(String));
+      expect(res.body.data.user).not.toHaveProperty('password');
       expect(res.body.data.accessToken).toEqual(expect.any(String));
       expect(res.headers['set-cookie']).toBeDefined();
       expect(res.headers['set-cookie'][0]).toMatch(/refreshToken=/);
@@ -63,6 +75,21 @@ describe('Auth (e2e)', () => {
         .send({ ...validSignupBody, isAdmin: true });
 
       expect(res.status).toBe(400);
+    });
+
+    it('returns 409 when signing up with an email that already exists', async () => {
+      const user = await signupTestUser(app);
+
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/auth/signup')
+        .send({
+          fullName: 'Someone Else',
+          username: `dup${Date.now()}`,
+          email: user.email,
+          password: 'Password1!',
+        });
+
+      expect(res.status).toBe(409);
     });
   });
 

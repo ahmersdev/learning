@@ -17,6 +17,17 @@ describe('AuthController', () => {
     return res;
   };
 
+  const mockSafeUser = {
+    id: 'user-123',
+    fullName: 'John Doe',
+    username: 'johndoe',
+    email: 'john@example.com',
+    role: 'user' as const,
+    mustChangePassword: false,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
@@ -54,11 +65,7 @@ describe('AuthController', () => {
 
     it('sets the refreshToken cookie and returns user + accessToken', async () => {
       authService.register.mockResolvedValue({
-        user: {
-          fullName: dto.fullName,
-          username: dto.username,
-          email: dto.email,
-        },
+        user: mockSafeUser,
         accessToken: 'access-token',
         refreshToken: 'refresh-token',
       });
@@ -76,11 +83,7 @@ describe('AuthController', () => {
         status: 'success',
         message: 'User registered successfully',
         data: {
-          user: {
-            fullName: dto.fullName,
-            username: dto.username,
-            email: dto.email,
-          },
+          user: mockSafeUser,
           accessToken: 'access-token',
         },
       });
@@ -95,7 +98,7 @@ describe('AuthController', () => {
 
     it('sets the refreshToken cookie and returns user + accessToken', async () => {
       authService.login.mockResolvedValue({
-        user: { username: undefined, email: 'john@example.com' },
+        user: mockSafeUser,
         accessToken: 'access-token',
         refreshToken: 'refresh-token',
       });
@@ -112,7 +115,7 @@ describe('AuthController', () => {
         status: 'success',
         message: 'Login successful',
         data: {
-          user: { username: undefined, email: dto.email },
+          user: mockSafeUser,
           accessToken: 'access-token',
         },
       });
