@@ -4,13 +4,15 @@ enum UserRole {
 }
 
 model User {
-  id                 String   @id @default(uuid())
+  id                 String    @id @default(uuid())
   fullName           String
-  username           String   @unique
-  email              String   @unique
+  username           String    @unique
+  email              String    @unique
   password           String
-  role               UserRole @default(user)
-  mustChangePassword Boolean  @default(false)
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  role               UserRole  @default(user)
+  mustChangePassword Boolean   @default(false)
+  lastLogin          DateTime?
+  sessions           Session[]
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 }

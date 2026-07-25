@@ -81,25 +81,38 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 30, ttl: 15 * 60 * 1000 } })
   @ApiOperation({
-    summary: 'Get a new access token using the refresh token cookie',
+    summary: 'Rotate the refresh token and get a new access token',
   })
   @ApiResponse({ status: 200, description: 'New access token issued' })
   @ApiResponse({
     status: 401,
-    description: 'Missing, invalid, or expired refresh token',
+    description: 'Missing, invalid, expired, or revoked refresh token',
   })
-  async refresh(@Req() req: Request) {
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const token = req.cookies?.refreshToken;
-    const { accessToken } = await this.authService.refresh(token);
+    const { accessToken, refreshToken } = await this.authService.refresh(token);
+
+    res.cookie('refreshToken', refreshToken, {
+      ...REFRESH_COOKIE_OPTIONS,
+      maxAge: REFRESH_COOKIE_MAX_AGE,
+    });
 
     return { status: 'success', data: { accessToken } };
   }
 
   @Post('signout')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Sign out and clear the refresh token cookie' })
+  @ApiOperation({ summary: 'Sign out and revoke the current session' })
   @ApiResponse({ status: 200, description: 'Logged out successfully' })
-  signout(@Res({ passthrough: true }) res: Response) {
+  async signout(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const token = req.cookies?.refreshToken;
+    await this.authService.signout(token);
     res.clearCookie('refreshToken', REFRESH_COOKIE_OPTIONS);
     return { status: 'success', message: 'Logged out successfully' };
   }

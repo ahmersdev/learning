@@ -6,16 +6,22 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { Prisma, type User } from '../generated/prisma/client';
+import { randomUUID } from 'crypto';
+import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '../generated/prisma/client';
+import type { User } from '../generated/prisma/client';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import { PrismaService } from '../prisma/prisma.service';
 
 const SALT_ROUNDS = 10;
 
-interface JwtPayload {
+interface AccessTokenPayload {
   userId: string;
   email: string;
+}
+
+interface RefreshTokenPayload extends AccessTokenPayload {
+  tokenId: string;
 }
 
 @Injectable()
@@ -26,14 +32,14 @@ export class AuthService {
     private readonly configService: ConfigService,
   ) {}
 
-  private generateAccessToken(payload: JwtPayload) {
+  private generateAccessToken(payload: AccessTokenPayload) {
     return this.jwtService.signAsync(payload, {
       secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
       expiresIn: this.configService.get<string>('JWT_ACCESS_EXPIRY'),
     } as JwtSignOptions);
   }
 
-  private generateRefreshToken(payload: JwtPayload) {
+  private generateRefreshToken(payload: RefreshTokenPayload) {
     return this.jwtService.signAsync(payload, {
       secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
       expiresIn: this.configService.get<string>('JWT_REFRESH_EXPIRY'),
@@ -42,7 +48,7 @@ export class AuthService {
 
   private verifyRefreshToken(token: string) {
     try {
-      return this.jwtService.verify<JwtPayload>(token, {
+      return this.jwtService.verify<RefreshTokenPayload>(token, {
         secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
       });
     } catch {
@@ -50,9 +56,55 @@ export class AuthService {
     }
   }
 
+  private parseExpiryToMs(expiry: string): number {
+    const match = /^(\d+)(s|m|h|d)$/.exec(expiry);
+    if (!match) {
+      throw new Error(`Invalid expiry format: ${expiry}`);
+    }
+    const value = Number(match[1]);
+    const multipliers: Record<string, number> = {
+      s: 1000,
+      m: 60 * 1000,
+      h: 60 * 60 * 1000,
+      d: 24 * 60 * 60 * 1000,
+    };
+    return value * multipliers[match[2]];
+  }
+
   private toSafeUser(user: User) {
     const { password, ...safeUser } = user;
     return safeUser;
+  }
+
+  /**
+   * Creates a session row and signs both tokens off the same tokenId,
+   * so a refresh token is only ever valid while its session row exists.
+   */
+  private async issueTokens(user: Pick<User, 'id' | 'email'>) {
+    const tokenId = randomUUID();
+    const refreshExpiry = this.configService.get<string>(
+      'JWT_REFRESH_EXPIRY',
+      '7d',
+    );
+    const expiresAt = new Date(
+      Date.now() + this.parseExpiryToMs(refreshExpiry),
+    );
+
+    await this.prisma.session.create({
+      data: { tokenId, userId: user.id, expiresAt },
+    });
+
+    const accessToken = await this.generateAccessToken({
+      userId: user.id,
+      email: user.email,
+    });
+    const refreshToken = await this.generateRefreshToken({
+      userId: user.id,
+      email: user.email,
+      tokenId,
+    });
+
+    return { accessToken, refreshToken };
   }
 
   async register(dto: RegisterDto) {
@@ -87,20 +139,14 @@ export class AuthService {
       throw error;
     }
 
-    const accessToken = await this.generateAccessToken({
-      userId: user.id,
-      email: user.email,
-    });
-    const refreshToken = await this.generateRefreshToken({
-      userId: user.id,
-      email: user.email,
+    user = await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLogin: new Date() },
     });
 
-    return {
-      user: this.toSafeUser(user),
-      accessToken,
-      refreshToken,
-    };
+    const { accessToken, refreshToken } = await this.issueTokens(user);
+
+    return { user: this.toSafeUser(user), accessToken, refreshToken };
   }
 
   async login(dto: LoginDto) {
@@ -119,20 +165,14 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    const accessToken = await this.generateAccessToken({
-      userId: user.id,
-      email: user.email,
-    });
-    const refreshToken = await this.generateRefreshToken({
-      userId: user.id,
-      email: user.email,
+    const updatedUser = await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLogin: new Date() },
     });
 
-    return {
-      user: this.toSafeUser(user),
-      accessToken,
-      refreshToken,
-    };
+    const { accessToken, refreshToken } = await this.issueTokens(updatedUser);
+
+    return { user: this.toSafeUser(updatedUser), accessToken, refreshToken };
   }
 
   async refresh(token: string | undefined) {
@@ -142,11 +182,39 @@ export class AuthService {
 
     const decoded = this.verifyRefreshToken(token);
 
-    const newAccessToken = await this.generateAccessToken({
-      userId: decoded.userId,
+    const session = await this.prisma.session.findUnique({
+      where: { tokenId: decoded.tokenId },
+    });
+
+    if (!session || session.expiresAt < new Date()) {
+      throw new UnauthorizedException('Session expired or revoked');
+    }
+
+    // Rotate: kill the old session row, issue a fresh tokenId + tokens.
+    await this.prisma.session.delete({ where: { id: session.id } });
+
+    const { accessToken, refreshToken } = await this.issueTokens({
+      id: decoded.userId,
       email: decoded.email,
     });
 
-    return { accessToken: newAccessToken };
+    return { accessToken, refreshToken };
+  }
+
+  async signout(token: string | undefined) {
+    if (!token) {
+      return;
+    }
+
+    try {
+      const decoded = this.jwtService.verify<RefreshTokenPayload>(token, {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+      });
+      await this.prisma.session.deleteMany({
+        where: { tokenId: decoded.tokenId },
+      });
+    } catch {
+      // Invalid/expired token — nothing to revoke, nothing to do.
+    }
   }
 }

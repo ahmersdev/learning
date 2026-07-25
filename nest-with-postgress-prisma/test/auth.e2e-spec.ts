@@ -46,6 +46,7 @@ describe('Auth (e2e)', () => {
         }),
       );
       expect(res.body.data.user.id).toEqual(expect.any(String));
+      expect(res.body.data.user.lastLogin).toEqual(expect.any(String));
       expect(res.body.data.user).not.toHaveProperty('password');
       expect(res.body.data.accessToken).toEqual(expect.any(String));
       expect(res.headers['set-cookie']).toBeDefined();
@@ -128,9 +129,19 @@ describe('Auth (e2e)', () => {
     it('returns 400 when password is missing', async () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/auth/signin')
-        .send({ email: 'john@example.com' });
+        .send({ email: 'someone@example.com' });
 
       expect(res.status).toBe(400);
+    });
+
+    it('returns 401 for a correct email with the wrong password', async () => {
+      const user = await signupTestUser(app);
+
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/auth/signin')
+        .send({ email: user.email, password: 'WrongPassword1!' });
+
+      expect(res.status).toBe(401);
     });
   });
 
@@ -143,7 +154,7 @@ describe('Auth (e2e)', () => {
       expect(res.status).toBe(401);
     });
 
-    it('returns a new accessToken when a valid refresh cookie is present', async () => {
+    it('returns a new accessToken and rotates the refreshToken cookie', async () => {
       const user = await signupTestUser(app);
 
       const res = await request(app.getHttpServer())
@@ -152,6 +163,24 @@ describe('Auth (e2e)', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.data.accessToken).toEqual(expect.any(String));
+      expect(res.headers['set-cookie']).toBeDefined();
+      expect(res.headers['set-cookie'][0]).toMatch(/refreshToken=/);
+      expect(res.headers['set-cookie'][0]).not.toBe(user.refreshTokenCookie);
+    });
+
+    it('rejects reuse of a refresh token cookie after it has been rotated', async () => {
+      const user = await signupTestUser(app);
+
+      const firstRefresh = await request(app.getHttpServer())
+        .post('/api/v1/auth/refresh')
+        .set('Cookie', user.refreshTokenCookie);
+      expect(firstRefresh.status).toBe(200);
+
+      const reuseAttempt = await request(app.getHttpServer())
+        .post('/api/v1/auth/refresh')
+        .set('Cookie', user.refreshTokenCookie);
+
+      expect(reuseAttempt.status).toBe(401);
     });
 
     it('returns 401 for a malformed refresh token cookie', async () => {
@@ -165,13 +194,37 @@ describe('Auth (e2e)', () => {
 
   describe('POST /api/v1/auth/signout', () => {
     it('clears the refreshToken cookie and returns 200', async () => {
+      const user = await signupTestUser(app);
+
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/auth/signout')
+        .set('Cookie', user.refreshTokenCookie);
+
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('success');
+      expect(res.headers['set-cookie'][0]).toMatch(/refreshToken=;/);
+    });
+
+    it('revokes the session so the refresh token no longer works after signout', async () => {
+      const user = await signupTestUser(app);
+
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/signout')
+        .set('Cookie', user.refreshTokenCookie);
+
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/auth/refresh')
+        .set('Cookie', user.refreshTokenCookie);
+
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 200 even when no refresh token cookie is present', async () => {
       const res = await request(app.getHttpServer()).post(
         '/api/v1/auth/signout',
       );
 
       expect(res.status).toBe(200);
-      expect(res.body.status).toBe('success');
-      expect(res.headers['set-cookie'][0]).toMatch(/refreshToken=;/);
     });
   });
 });

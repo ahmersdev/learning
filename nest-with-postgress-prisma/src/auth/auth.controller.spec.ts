@@ -24,6 +24,7 @@ describe('AuthController', () => {
     email: 'john@example.com',
     role: 'user' as const,
     mustChangePassword: false,
+    lastLogin: new Date(),
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -38,6 +39,7 @@ describe('AuthController', () => {
             register: jest.fn(),
             login: jest.fn(),
             refresh: jest.fn(),
+            signout: jest.fn(),
           },
         },
       ],
@@ -82,10 +84,7 @@ describe('AuthController', () => {
       expect(result).toEqual({
         status: 'success',
         message: 'User registered successfully',
-        data: {
-          user: mockSafeUser,
-          accessToken: 'access-token',
-        },
+        data: { user: mockSafeUser, accessToken: 'access-token' },
       });
     });
   });
@@ -114,26 +113,30 @@ describe('AuthController', () => {
       expect(result).toEqual({
         status: 'success',
         message: 'Login successful',
-        data: {
-          user: mockSafeUser,
-          accessToken: 'access-token',
-        },
+        data: { user: mockSafeUser, accessToken: 'access-token' },
       });
     });
   });
 
   describe('refresh', () => {
-    it('reads the refreshToken cookie and returns a new accessToken', async () => {
+    it('reads the refreshToken cookie, rotates it, and returns a new accessToken', async () => {
       authService.refresh.mockResolvedValue({
         accessToken: 'new-access-token',
+        refreshToken: 'new-refresh-token',
       });
       const req = {
         cookies: { refreshToken: 'old-refresh-token' },
       } as unknown as Request;
+      const res = mockResponse();
 
-      const result = await controller.refresh(req);
+      const result = await controller.refresh(req, res);
 
       expect(authService.refresh).toHaveBeenCalledWith('old-refresh-token');
+      expect(res.cookie).toHaveBeenCalledWith(
+        'refreshToken',
+        'new-refresh-token',
+        expect.objectContaining({ httpOnly: true, sameSite: 'strict' }),
+      );
       expect(result).toEqual({
         status: 'success',
         data: { accessToken: 'new-access-token' },
@@ -143,21 +146,27 @@ describe('AuthController', () => {
     it('passes undefined to the service when no cookie is present', async () => {
       authService.refresh.mockResolvedValue({
         accessToken: 'new-access-token',
+        refreshToken: 'new-refresh-token',
       });
       const req = { cookies: {} } as unknown as Request;
+      const res = mockResponse();
 
-      await controller.refresh(req);
+      await controller.refresh(req, res);
 
       expect(authService.refresh).toHaveBeenCalledWith(undefined);
     });
   });
 
   describe('signout', () => {
-    it('clears the refreshToken cookie and returns a success message', () => {
+    it('revokes the session and clears the refreshToken cookie', async () => {
+      const req = {
+        cookies: { refreshToken: 'some-refresh-token' },
+      } as unknown as Request;
       const res = mockResponse();
 
-      const result = controller.signout(res);
+      const result = await controller.signout(req, res);
 
+      expect(authService.signout).toHaveBeenCalledWith('some-refresh-token');
       expect(res.clearCookie).toHaveBeenCalledWith(
         'refreshToken',
         expect.objectContaining({ httpOnly: true, sameSite: 'strict' }),
@@ -166,6 +175,16 @@ describe('AuthController', () => {
         status: 'success',
         message: 'Logged out successfully',
       });
+    });
+
+    it('still clears the cookie when no refreshToken cookie is present', async () => {
+      const req = { cookies: {} } as unknown as Request;
+      const res = mockResponse();
+
+      await controller.signout(req, res);
+
+      expect(authService.signout).toHaveBeenCalledWith(undefined);
+      expect(res.clearCookie).toHaveBeenCalled();
     });
   });
 });

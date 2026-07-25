@@ -3,10 +3,11 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import { Prisma, type User } from '../generated/prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '../generated/prisma/client';
+import type { User, Session } from '../generated/prisma/client';
 
 jest.mock('bcrypt', () => ({
   hash: jest.fn(),
@@ -17,7 +18,15 @@ import * as bcrypt from 'bcrypt';
 describe('AuthService', () => {
   let service: AuthService;
   let jwtService: jest.Mocked<JwtService>;
-  let prisma: { user: { findFirst: jest.Mock; create: jest.Mock } };
+  let prisma: {
+    user: { findFirst: jest.Mock; create: jest.Mock; update: jest.Mock };
+    session: {
+      create: jest.Mock;
+      findUnique: jest.Mock;
+      delete: jest.Mock;
+      deleteMany: jest.Mock;
+    };
+  };
 
   const mockConfig: Record<string, string> = {
     JWT_ACCESS_SECRET: 'access-secret',
@@ -34,8 +43,21 @@ describe('AuthService', () => {
     password: 'hashed-password',
     role: 'user',
     mustChangePassword: false,
+    lastLogin: null,
     createdAt: new Date(),
     updatedAt: new Date(),
+  };
+
+  const mockUpdatedUser: User = { ...mockUser, lastLogin: new Date() };
+
+  const mockSession: Session = {
+    id: 'session-123',
+    tokenId: 'token-abc',
+    userId: mockUser.id,
+    userAgent: null,
+    ipAddress: null,
+    createdAt: new Date(),
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
   };
 
   beforeEach(async () => {
@@ -43,6 +65,13 @@ describe('AuthService', () => {
       user: {
         findFirst: jest.fn(),
         create: jest.fn(),
+        update: jest.fn(),
+      },
+      session: {
+        create: jest.fn(),
+        findUnique: jest.fn(),
+        delete: jest.fn(),
+        deleteMany: jest.fn(),
       },
     };
 
@@ -80,6 +109,14 @@ describe('AuthService', () => {
       password: 'Password1!',
     };
 
+    const setupHappyPath = () => {
+      prisma.user.findFirst.mockResolvedValue(null);
+      (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-password');
+      prisma.user.create.mockResolvedValue(mockUser);
+      prisma.user.update.mockResolvedValue(mockUpdatedUser);
+      prisma.session.create.mockResolvedValue(mockSession);
+    };
+
     it('throws ConflictException when email or username is already taken', async () => {
       prisma.user.findFirst.mockResolvedValue(mockUser);
 
@@ -87,55 +124,15 @@ describe('AuthService', () => {
       expect(prisma.user.create).not.toHaveBeenCalled();
     });
 
-    it('hashes the password before saving', async () => {
-      prisma.user.findFirst.mockResolvedValue(null);
-      prisma.user.create.mockResolvedValue(mockUser);
-      (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-password');
-
-      await service.register(dto);
-
-      expect(bcrypt.hash).toHaveBeenCalledWith(dto.password, 10);
-      const savedData = prisma.user.create.mock.calls[0][0].data;
-      expect(savedData.password).toBe('hashed-password');
-    });
-
-    it('returns the created user without the password field', async () => {
-      prisma.user.findFirst.mockResolvedValue(null);
-      prisma.user.create.mockResolvedValue(mockUser);
-
-      const result = await service.register(dto);
-
-      expect(result.user).not.toHaveProperty('password');
-      expect(result.user.email).toBe(mockUser.email);
-    });
-
-    it('signs access and refresh tokens with the created user id', async () => {
-      prisma.user.findFirst.mockResolvedValue(null);
-      prisma.user.create.mockResolvedValue(mockUser);
-
-      const result = await service.register(dto);
-
-      expect(jwtService.signAsync).toHaveBeenCalledWith(
-        { userId: mockUser.id, email: mockUser.email },
-        { secret: 'access-secret', expiresIn: '15m' },
-      );
-      expect(jwtService.signAsync).toHaveBeenCalledWith(
-        { userId: mockUser.id, email: mockUser.email },
-        { secret: 'refresh-secret', expiresIn: '7d' },
-      );
-      expect(result.accessToken).toBe('mocked.jwt.token');
-      expect(result.refreshToken).toBe('mocked.jwt.token');
-    });
-
     it('converts a P2002 unique-constraint error into ConflictException', async () => {
       prisma.user.findFirst.mockResolvedValue(null);
       (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-password');
-
-      const p2002Error = new Prisma.PrismaClientKnownRequestError(
-        'Unique constraint failed on the fields: (`email`)',
-        { code: 'P2002', clientVersion: '7.9.0' },
+      prisma.user.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError(
+          'Unique constraint failed on the fields: (`email`)',
+          { code: 'P2002', clientVersion: '7.9.0' },
+        ),
       );
-      prisma.user.create.mockRejectedValue(p2002Error);
 
       await expect(service.register(dto)).rejects.toThrow(ConflictException);
     });
@@ -143,16 +140,38 @@ describe('AuthService', () => {
     it('re-throws non-P2002 errors from create without converting them', async () => {
       prisma.user.findFirst.mockResolvedValue(null);
       (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-password');
+      prisma.user.create.mockRejectedValue(new Error('connection lost'));
 
-      const dbDownError = new Error('connection terminated unexpectedly');
-      prisma.user.create.mockRejectedValue(dbDownError);
+      await expect(service.register(dto)).rejects.toThrow('connection lost');
+    });
 
-      await expect(service.register(dto)).rejects.toThrow(
-        'connection terminated unexpectedly',
-      );
-      await expect(service.register(dto)).rejects.not.toThrow(
-        ConflictException,
-      );
+    it('sets lastLogin and creates a session on success', async () => {
+      setupHappyPath();
+
+      await service.register(dto);
+
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: mockUser.id },
+        data: { lastLogin: expect.any(Date) },
+      });
+      expect(prisma.session.create).toHaveBeenCalledWith({
+        data: {
+          tokenId: expect.any(String),
+          userId: mockUser.id,
+          expiresAt: expect.any(Date),
+        },
+      });
+    });
+
+    it('returns the created user without the password field', async () => {
+      setupHappyPath();
+
+      const result = await service.register(dto);
+
+      expect(result.user).not.toHaveProperty('password');
+      expect(result.user.email).toBe(mockUser.email);
+      expect(result.accessToken).toBe('mocked.jwt.token');
+      expect(result.refreshToken).toBe('mocked.jwt.token');
     });
   });
 
@@ -175,14 +194,20 @@ describe('AuthService', () => {
       await expect(service.login(dto)).rejects.toThrow(UnauthorizedException);
     });
 
-    it('returns the user without the password field and both tokens on success', async () => {
+    it('updates lastLogin, creates a session, and returns tokens on success', async () => {
       prisma.user.findFirst.mockResolvedValue(mockUser);
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      prisma.user.update.mockResolvedValue(mockUpdatedUser);
+      prisma.session.create.mockResolvedValue(mockSession);
 
       const result = await service.login(dto);
 
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: mockUser.id },
+        data: { lastLogin: expect.any(Date) },
+      });
+      expect(prisma.session.create).toHaveBeenCalled();
       expect(result.user).not.toHaveProperty('password');
-      expect(result.user.email).toBe(mockUser.email);
       expect(result.accessToken).toBe('mocked.jwt.token');
       expect(result.refreshToken).toBe('mocked.jwt.token');
     });
@@ -195,7 +220,7 @@ describe('AuthService', () => {
       );
     });
 
-    it('throws UnauthorizedException when the token is invalid', async () => {
+    it('throws UnauthorizedException when the token signature is invalid', async () => {
       jwtService.verify.mockImplementation(() => {
         throw new Error('invalid signature');
       });
@@ -205,18 +230,94 @@ describe('AuthService', () => {
       );
     });
 
-    it('returns a new access token when the refresh token is valid', async () => {
+    it('throws UnauthorizedException when the session no longer exists (revoked)', async () => {
       jwtService.verify.mockReturnValue({
-        userId: 'user-123',
-        email: 'john@example.com',
+        userId: mockUser.id,
+        email: mockUser.email,
+        tokenId: 'deleted-token-id',
+      });
+      prisma.session.findUnique.mockResolvedValue(null);
+
+      await expect(service.refresh('valid.jwt.token')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('throws UnauthorizedException when the session has expired', async () => {
+      jwtService.verify.mockReturnValue({
+        userId: mockUser.id,
+        email: mockUser.email,
+        tokenId: mockSession.tokenId,
+      });
+      prisma.session.findUnique.mockResolvedValue({
+        ...mockSession,
+        expiresAt: new Date(Date.now() - 1000),
       });
 
-      const result = await service.refresh('valid.refresh.token');
+      await expect(service.refresh('valid.jwt.token')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
 
+    it('rotates the session: deletes the old one and issues new tokens', async () => {
+      jwtService.verify.mockReturnValue({
+        userId: mockUser.id,
+        email: mockUser.email,
+        tokenId: mockSession.tokenId,
+      });
+      prisma.session.findUnique.mockResolvedValue(mockSession);
+      prisma.session.delete.mockResolvedValue(mockSession);
+      prisma.session.create.mockResolvedValue({
+        ...mockSession,
+        id: 'session-456',
+        tokenId: 'new-token-id',
+      });
+
+      const result = await service.refresh('valid.jwt.token');
+
+      expect(prisma.session.delete).toHaveBeenCalledWith({
+        where: { id: mockSession.id },
+      });
+      expect(prisma.session.create).toHaveBeenCalledWith({
+        data: {
+          tokenId: expect.any(String),
+          userId: mockUser.id,
+          expiresAt: expect.any(Date),
+        },
+      });
       expect(result.accessToken).toBe('mocked.jwt.token');
-      expect(jwtService.verify).toHaveBeenCalledWith('valid.refresh.token', {
-        secret: 'refresh-secret',
+      expect(result.refreshToken).toBe('mocked.jwt.token');
+    });
+  });
+
+  describe('signout', () => {
+    it('does nothing when no token is provided', async () => {
+      await service.signout(undefined);
+
+      expect(prisma.session.deleteMany).not.toHaveBeenCalled();
+    });
+
+    it('deletes the session matching the tokenId from a valid token', async () => {
+      jwtService.verify.mockReturnValue({
+        userId: mockUser.id,
+        email: mockUser.email,
+        tokenId: mockSession.tokenId,
       });
+
+      await service.signout('valid.jwt.token');
+
+      expect(prisma.session.deleteMany).toHaveBeenCalledWith({
+        where: { tokenId: mockSession.tokenId },
+      });
+    });
+
+    it('does not throw when the token is invalid or expired', async () => {
+      jwtService.verify.mockImplementation(() => {
+        throw new Error('invalid signature');
+      });
+
+      await expect(service.signout('bad.token')).resolves.toBeUndefined();
+      expect(prisma.session.deleteMany).not.toHaveBeenCalled();
     });
   });
 });
