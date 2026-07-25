@@ -3,7 +3,7 @@ import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
-import { ValidationPipe } from '@nestjs/common';
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 async function bootstrap() {
@@ -29,6 +29,17 @@ async function bootstrap() {
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
+      exceptionFactory: (errors) => {
+        const details = errors.map((error) => ({
+          field: error.property,
+          message: Object.values(error.constraints ?? {}).join(', '),
+        }));
+
+        return new BadRequestException({
+          message: 'Validation failed',
+          details,
+        });
+      },
     }),
   );
 

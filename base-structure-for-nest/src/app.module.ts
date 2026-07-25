@@ -1,17 +1,19 @@
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_FILTER } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
-import { CustomThrottlerGuard } from './common/guards/custom-throttler.guard';
 import { UsersModule } from './users/users.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { WorkspaceMembersModule } from './workspace-members/workspace-members.module';
 import { ProjectsModule } from './projects/projects.module';
 import { TasksModule } from './tasks/tasks.module';
 import { CommentsModule } from './comments/comments.module';
+import { CustomThrottlerGuard } from './common/guards/custom-throttler.guard';
+import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { RequestLoggerMiddleware } from './common/middleware/request-logger.middleware';
 
 @Module({
   imports: [
@@ -21,7 +23,7 @@ import { CommentsModule } from './comments/comments.module';
     ThrottlerModule.forRoot([
       {
         name: 'default',
-        ttl: 15 * 60 * 1000, // 15 minutes
+        ttl: 15 * 60 * 1000,
         limit: 100,
       },
     ]),
@@ -40,6 +42,14 @@ import { CommentsModule } from './comments/comments.module';
       provide: APP_GUARD,
       useClass: CustomThrottlerGuard,
     },
+    {
+      provide: APP_FILTER,
+      useClass: AllExceptionsFilter,
+    },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RequestLoggerMiddleware).forRoutes('*');
+  }
+}
