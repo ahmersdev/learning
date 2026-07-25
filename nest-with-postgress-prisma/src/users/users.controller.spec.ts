@@ -14,6 +14,18 @@ describe('UsersController', () => {
     email: 'john@example.com',
   };
 
+  const mockSafeUser = {
+    id: mockUser.id,
+    fullName: 'John Doe',
+    username: 'johndoe',
+    email: mockUser.email,
+    role: 'user' as const,
+    mustChangePassword: false,
+    lastLogin: new Date(),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [UsersController],
@@ -45,26 +57,14 @@ describe('UsersController', () => {
 
   describe('getUser', () => {
     it('returns the current user profile wrapped in the standard response shape', async () => {
-      usersService.getUser.mockResolvedValue({
-        id: mockUser.id,
-        fullName: 'Stub User',
-        username: 'stubuser',
-        email: mockUser.email,
-      });
+      usersService.getUser.mockResolvedValue(mockSafeUser);
 
       const result = await controller.getUser(mockUser);
 
       expect(usersService.getUser).toHaveBeenCalledWith(mockUser.id);
       expect(result).toEqual({
         status: 'success',
-        data: {
-          user: {
-            id: mockUser.id,
-            fullName: 'Stub User',
-            username: 'stubuser',
-            email: mockUser.email,
-          },
-        },
+        data: { user: mockSafeUser },
       });
     });
   });
@@ -72,11 +72,8 @@ describe('UsersController', () => {
   describe('patchUser', () => {
     it('calls updateUser with the current user id and dto, and returns the standard response shape', async () => {
       const dto: UpdateUserDto = { fullName: 'Jane Doe' };
-      usersService.updateUser.mockResolvedValue({
-        id: mockUser.id,
-        fullName: 'Jane Doe',
-        username: 'stubuser',
-      });
+      const updated = { ...mockSafeUser, fullName: 'Jane Doe' };
+      usersService.updateUser.mockResolvedValue(updated);
 
       const result = await controller.patchUser(mockUser, dto);
 
@@ -84,9 +81,7 @@ describe('UsersController', () => {
       expect(result).toEqual({
         status: 'success',
         message: 'Profile updated successfully',
-        data: {
-          user: { id: mockUser.id, fullName: 'Jane Doe', username: 'stubuser' },
-        },
+        data: { user: updated },
       });
     });
   });

@@ -12,6 +12,7 @@ import { Prisma } from '../generated/prisma/client';
 import type { User } from '../generated/prisma/client';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { toSafeUser } from '../common/utils/safe-user.util';
 
 const SALT_ROUNDS = 10;
 
@@ -73,11 +74,6 @@ export class AuthService {
       d: 24 * 60 * 60 * 1000,
     };
     return value * multipliers[match[2]];
-  }
-
-  private toSafeUser(user: User) {
-    const { password, ...safeUser } = user;
-    return safeUser;
   }
 
   /**
@@ -154,7 +150,7 @@ export class AuthService {
 
     const { accessToken, refreshToken } = await this.issueTokens(user);
 
-    return { user: this.toSafeUser(user), accessToken, refreshToken };
+    return { user: toSafeUser(user), accessToken, refreshToken };
   }
 
   async login(dto: LoginDto) {
@@ -180,7 +176,7 @@ export class AuthService {
 
     const { accessToken, refreshToken } = await this.issueTokens(updatedUser);
 
-    return { user: this.toSafeUser(updatedUser), accessToken, refreshToken };
+    return { user: toSafeUser(user), accessToken, refreshToken };
   }
 
   async refresh(token: string | undefined) {

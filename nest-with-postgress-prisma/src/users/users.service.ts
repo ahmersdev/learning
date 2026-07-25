@@ -1,24 +1,28 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '../generated/prisma/client';
+import { toSafeUser } from '../common/utils/safe-user.util';
 import { UpdateUserDto } from './dto/update-user.dto';
-
-export interface UserProfile {
-  id: string;
-  fullName: string;
-  username: string;
-  email: string;
-}
 
 @Injectable()
 export class UsersService {
-  async getUser(userId: string): Promise<UserProfile> {
-    // TODO: find user by id in DB -> if not found, throw new NotFoundException("User not found")
+  constructor(private readonly prisma: PrismaService) {}
 
-    return {
-      id: userId,
-      fullName: 'Stub User',
-      username: 'stubuser',
-      email: 'stub@example.com',
-    };
+  async getUser(userId: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return toSafeUser(user);
   }
 
   async updateUser(userId: string, updates: UpdateUserDto) {
@@ -28,13 +32,23 @@ export class UsersService {
       );
     }
 
-    // TODO: find user by id, apply updates, save to DB
-    // if user not found -> throw new NotFoundException("User not found")
+    try {
+      const updatedUser = await this.prisma.user.update({
+        where: { id: userId },
+        data: updates,
+      });
 
-    return {
-      id: userId,
-      fullName: updates.fullName ?? 'Stub User',
-      username: updates.username ?? 'stubuser',
-    };
+      return toSafeUser(updatedUser);
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2025') {
+          throw new NotFoundException('User not found');
+        }
+        if (error.code === 'P2002') {
+          throw new ConflictException('Username is already taken');
+        }
+      }
+      throw error;
+    }
   }
 }

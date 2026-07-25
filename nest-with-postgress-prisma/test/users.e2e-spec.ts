@@ -43,10 +43,13 @@ describe('Users (e2e)', () => {
         expect.objectContaining({
           id: expect.any(String),
           fullName: expect.any(String),
-          username: expect.any(String),
-          email: expect.any(String),
+          username: user.username,
+          email: user.email,
+          role: 'user',
+          mustChangePassword: false,
         }),
       );
+      expect(res.body.data.user).not.toHaveProperty('password');
     });
   });
 
@@ -85,6 +88,18 @@ describe('Users (e2e)', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.data.user.fullName).toBe('Updated Name');
+      expect(res.body.data.user).not.toHaveProperty('password');
+    });
+
+    it('returns 409 when updating username to one that already exists', async () => {
+      const otherUser = await signupTestUser(app);
+
+      const res = await request(app.getHttpServer())
+        .patch('/api/v1/users/me')
+        .set('Authorization', `Bearer ${user.accessToken}`)
+        .send({ username: otherUser.username });
+
+      expect(res.status).toBe(409);
     });
   });
 });
