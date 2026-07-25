@@ -73,6 +73,14 @@ describe('Projects (e2e)', () => {
   });
 
   describe(`GET /api/v1/workspaces/:workspaceId/projects/:projectId`, () => {
+    it('returns 401 with no access token', async () => {
+      const res = await request(app.getHttpServer()).get(
+        `/api/v1/workspaces/${workspaceId}/projects/project-456`,
+      );
+
+      expect(res.status).toBe(401);
+    });
+
     it('returns a project with a valid access token', async () => {
       const res = await request(app.getHttpServer())
         .get(`/api/v1/workspaces/${workspaceId}/projects/project-456`)

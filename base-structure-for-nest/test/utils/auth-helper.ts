@@ -26,6 +26,12 @@ export async function signupTestUser(
       password: 'Password1!',
     });
 
+  if (res.status !== 201) {
+    throw new Error(
+      `signupTestUser: expected 201 but got ${res.status} - ${JSON.stringify(res.body)}`,
+    );
+  }
+
   return {
     accessToken: res.body.data.accessToken,
     refreshTokenCookie: res.headers['set-cookie'][0],

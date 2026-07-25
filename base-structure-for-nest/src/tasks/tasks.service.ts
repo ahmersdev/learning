@@ -108,7 +108,8 @@ export class TasksService {
 
     // TODO: find task by id -> if not found OR not in this project,
     // throw new NotFoundException("Task not found")
-    // apply updates, save
+    // MERGE dto fields onto the existing row (don't default missing fields
+    // to stub/null values — that will wipe real data once DB is wired up)
 
     return {
       id: taskId,

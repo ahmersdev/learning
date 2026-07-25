@@ -43,16 +43,22 @@ async function bootstrap() {
     }),
   );
 
-  const config = new DocumentBuilder()
-    .setTitle('My NestJS API')
-    .setDescription('The API description')
-    .setVersion('1.0')
-    .build();
+  if (configService.get<string>('NODE_ENV') !== 'production') {
+    const config = new DocumentBuilder()
+      .setTitle('My NestJS API')
+      .setDescription('The API description')
+      .setVersion('1.0')
+      .build();
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api-docs', app, document);
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api-docs', app, document);
+  }
 
   const port = configService.get<string>('PORT', '4000');
   await app.listen(port);
 }
-bootstrap();
+
+bootstrap().catch((error) => {
+  console.error('Failed to start application', error);
+  process.exit(1);
+});

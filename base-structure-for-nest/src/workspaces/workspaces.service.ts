@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
@@ -66,7 +62,8 @@ export class WorkspacesService {
 
     // TODO: find workspace by id -> if not found OR not owned by ownerId,
     // throw new NotFoundException("Workspace not found")
-    // apply updates, save
+    // MERGE dto fields onto the existing row (don't just default missing
+    // fields to null/stub values — that will wipe real data once DB is wired up)
 
     return {
       id: workspaceId,

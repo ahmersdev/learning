@@ -74,7 +74,8 @@ export class ProjectsService {
 
     // TODO: find project by id -> if not found OR not in this workspace,
     // throw new NotFoundException("Project not found")
-    // apply updates, save
+    // MERGE dto fields onto the existing row (don't default missing fields
+    // to null/stub values — that will wipe real data once DB is wired up)
 
     return {
       id: projectId,

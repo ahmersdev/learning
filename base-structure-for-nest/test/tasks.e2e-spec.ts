@@ -141,6 +141,14 @@ describe('Tasks (e2e)', () => {
   });
 
   describe(`GET /api/v1/projects/:projectId/tasks/:taskId`, () => {
+    it('returns 401 with no access token', async () => {
+      const res = await request(app.getHttpServer()).get(
+        `/api/v1/projects/${projectId}/tasks/task-456`,
+      );
+
+      expect(res.status).toBe(401);
+    });
+
     it('returns a task with a valid access token', async () => {
       const res = await request(app.getHttpServer())
         .get(`/api/v1/projects/${projectId}/tasks/task-456`)

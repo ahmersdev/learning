@@ -16,11 +16,6 @@ export class CustomThrottlerGuard extends ThrottlerGuard {
     _context: ExecutionContext,
     _throttlerLimitDetail: ThrottlerLimitDetail,
   ): Promise<void> {
-    throw new ThrottlerException(
-      JSON.stringify({
-        status: 'error',
-        message: 'Too many requests, please try again later',
-      }),
-    );
+    throw new ThrottlerException('Too many requests, please try again later');
   }
 }

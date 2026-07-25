@@ -18,6 +18,11 @@ export class WorkspaceMembersService {
   //   in this workspace (throw NotFoundException if they aren't a member at all)
   // - all other methods should perform real membership queries/writes,
   //   scoped to workspaceId
+  // - IMPORTANT: WorkspacesService.create() must insert the owner into
+  //   workspace_members with role 'admin' at creation time, in the same
+  //   transaction as the workspace insert — otherwise the owner has no
+  //   membership row and getRequesterRole will incorrectly treat them as
+  //   a non-member once real lookups replace this stub
 
   async getRequesterRole(
     workspaceId: string,

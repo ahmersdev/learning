@@ -2,6 +2,7 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { createTestApp } from './utils/create-test-app';
+import { signupTestUser } from './utils/auth-helper';
 
 describe('Auth (e2e)', () => {
   let app: INestApplication<App>;
@@ -67,9 +68,11 @@ describe('Auth (e2e)', () => {
 
   describe('POST /api/v1/auth/signin', () => {
     it('logs in with email and returns 200 with accessToken + refreshToken cookie', async () => {
+      const user = await signupTestUser(app);
+
       const res = await request(app.getHttpServer())
         .post('/api/v1/auth/signin')
-        .send({ email: 'john@example.com', password: 'Password1!' });
+        .send({ email: user.email, password: 'Password1!' });
 
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('success');
@@ -78,9 +81,11 @@ describe('Auth (e2e)', () => {
     });
 
     it('logs in with username and returns 200', async () => {
+      const user = await signupTestUser(app);
+
       const res = await request(app.getHttpServer())
         .post('/api/v1/auth/signin')
-        .send({ username: 'johndoe', password: 'Password1!' });
+        .send({ username: user.username, password: 'Password1!' });
 
       expect(res.status).toBe(200);
     });
@@ -112,15 +117,11 @@ describe('Auth (e2e)', () => {
     });
 
     it('returns a new accessToken when a valid refresh cookie is present', async () => {
-      const signinRes = await request(app.getHttpServer())
-        .post('/api/v1/auth/signin')
-        .send({ email: 'john@example.com', password: 'Password1!' });
-
-      const cookie = signinRes.headers['set-cookie'][0];
+      const user = await signupTestUser(app);
 
       const res = await request(app.getHttpServer())
         .post('/api/v1/auth/refresh')
-        .set('Cookie', cookie);
+        .set('Cookie', user.refreshTokenCookie);
 
       expect(res.status).toBe(200);
       expect(res.body.data.accessToken).toEqual(expect.any(String));
