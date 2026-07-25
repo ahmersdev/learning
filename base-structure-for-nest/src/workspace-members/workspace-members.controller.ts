@@ -25,7 +25,7 @@ import { CreateWorkspaceMemberDto } from './dto/create-workspace-member.dto';
 import { UpdateWorkspaceMemberDto } from './dto/update-workspace-member.dto';
 
 @ApiTags('Workspace Members')
-@ApiBearerAuth()
+@ApiBearerAuth('access-token')
 @UseGuards(JwtAuthGuard)
 @Controller('workspaces/:workspaceId/members')
 export class WorkspaceMembersController {
