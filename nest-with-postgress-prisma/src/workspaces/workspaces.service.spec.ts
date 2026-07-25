@@ -1,19 +1,57 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { WorkspacesService } from './workspaces.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
+import type { Workspace } from '../generated/prisma/client';
 
 describe('WorkspacesService', () => {
   let service: WorkspacesService;
+  let prisma: {
+    workspace: {
+      create: jest.Mock;
+      findMany: jest.Mock;
+      findFirst: jest.Mock;
+      update: jest.Mock;
+      delete: jest.Mock;
+    };
+  };
+
   const ownerId = 'user-123';
 
+  const mockWorkspace: Workspace = {
+    id: 'workspace-456',
+    name: 'Marketing Team',
+    description: 'Workspace for marketing',
+    ownerId,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
   beforeEach(async () => {
+    prisma = {
+      workspace: {
+        create: jest.fn(),
+        findMany: jest.fn(),
+        findFirst: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+      },
+    };
+
     const module: TestingModule = await Test.createTestingModule({
-      providers: [WorkspacesService],
+      providers: [
+        WorkspacesService,
+        { provide: PrismaService, useValue: prisma },
+      ],
     }).compile();
 
     service = module.get<WorkspacesService>(WorkspacesService);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
   });
 
   describe('create', () => {
@@ -22,44 +60,62 @@ describe('WorkspacesService', () => {
         name: 'Marketing Team',
         description: 'Workspace for marketing',
       };
+      prisma.workspace.create.mockResolvedValue(mockWorkspace);
 
       const result = await service.create(ownerId, dto);
 
-      expect(result).toEqual({
-        id: expect.any(String),
-        ownerId,
-        name: 'Marketing Team',
-        description: 'Workspace for marketing',
+      expect(prisma.workspace.create).toHaveBeenCalledWith({
+        data: { name: dto.name, description: dto.description, ownerId },
       });
+      expect(result).toEqual(mockWorkspace);
     });
 
     it('defaults description to null when not provided', async () => {
       const dto: CreateWorkspaceDto = { name: 'Marketing Team' };
+      prisma.workspace.create.mockResolvedValue({
+        ...mockWorkspace,
+        description: null,
+      });
 
-      const result = await service.create(ownerId, dto);
+      await service.create(ownerId, dto);
 
-      expect(result.description).toBeNull();
+      expect(prisma.workspace.create).toHaveBeenCalledWith({
+        data: { name: dto.name, description: null, ownerId },
+      });
     });
   });
 
   describe('findAll', () => {
-    it('returns an array of workspaces for the given ownerId', async () => {
+    it('returns workspaces scoped to the given ownerId', async () => {
+      prisma.workspace.findMany.mockResolvedValue([mockWorkspace]);
+
       const result = await service.findAll(ownerId);
 
-      expect(Array.isArray(result)).toBe(true);
-      expect(result[0]).toEqual(
-        expect.objectContaining({ ownerId, name: expect.any(String) }),
-      );
+      expect(prisma.workspace.findMany).toHaveBeenCalledWith({
+        where: { ownerId },
+      });
+      expect(result).toEqual([mockWorkspace]);
     });
   });
 
   describe('findOne', () => {
-    it('returns a workspace matching the given workspaceId and ownerId', async () => {
-      const result = await service.findOne(ownerId, 'workspace-456');
+    it('returns the workspace when it exists and is owned by the caller', async () => {
+      prisma.workspace.findFirst.mockResolvedValue(mockWorkspace);
 
-      expect(result).toEqual(
-        expect.objectContaining({ id: 'workspace-456', ownerId }),
-      );
+      const result = await service.findOne(ownerId, mockWorkspace.id);
+
+      expect(prisma.workspace.findFirst).toHaveBeenCalledWith({
+        where: { id: mockWorkspace.id, ownerId },
+      });
+      expect(result).toEqual(mockWorkspace);
+    });
+
+    it('throws NotFoundException when the workspace does not exist or is owned by someone else', async () => {
+      prisma.workspace.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.findOne(ownerId, 'someone-elses-workspace'),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -68,32 +124,58 @@ describe('WorkspacesService', () => {
       const dto: UpdateWorkspaceDto = {};
 
       await expect(
-        service.update(ownerId, 'workspace-456', dto),
+        service.update(ownerId, mockWorkspace.id, dto),
       ).rejects.toThrow(BadRequestException);
+      expect(prisma.workspace.findFirst).not.toHaveBeenCalled();
     });
 
-    it('updates name when only name is provided', async () => {
+    it('throws NotFoundException when the workspace does not exist or is owned by someone else', async () => {
+      prisma.workspace.findFirst.mockResolvedValue(null);
+      const dto: UpdateWorkspaceDto = { name: 'Renamed' };
+
+      await expect(
+        service.update(ownerId, mockWorkspace.id, dto),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.workspace.update).not.toHaveBeenCalled();
+    });
+
+    it('updates only the fields provided', async () => {
+      prisma.workspace.findFirst.mockResolvedValue(mockWorkspace);
+      prisma.workspace.update.mockResolvedValue({
+        ...mockWorkspace,
+        name: 'Renamed Workspace',
+      });
       const dto: UpdateWorkspaceDto = { name: 'Renamed Workspace' };
 
-      const result = await service.update(ownerId, 'workspace-456', dto);
+      const result = await service.update(ownerId, mockWorkspace.id, dto);
 
+      expect(prisma.workspace.update).toHaveBeenCalledWith({
+        where: { id: mockWorkspace.id },
+        data: { name: 'Renamed Workspace' },
+      });
       expect(result.name).toBe('Renamed Workspace');
-    });
-
-    it('updates description when only description is provided', async () => {
-      const dto: UpdateWorkspaceDto = { description: 'New description' };
-
-      const result = await service.update(ownerId, 'workspace-456', dto);
-
-      expect(result.description).toBe('New description');
     });
   });
 
   describe('remove', () => {
-    it('resolves without throwing', async () => {
-      await expect(
-        service.remove(ownerId, 'workspace-456'),
-      ).resolves.toBeUndefined();
+    it('throws NotFoundException when the workspace does not exist or is owned by someone else', async () => {
+      prisma.workspace.findFirst.mockResolvedValue(null);
+
+      await expect(service.remove(ownerId, mockWorkspace.id)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(prisma.workspace.delete).not.toHaveBeenCalled();
+    });
+
+    it('deletes the workspace when it exists and is owned by the caller', async () => {
+      prisma.workspace.findFirst.mockResolvedValue(mockWorkspace);
+      prisma.workspace.delete.mockResolvedValue(mockWorkspace);
+
+      await service.remove(ownerId, mockWorkspace.id);
+
+      expect(prisma.workspace.delete).toHaveBeenCalledWith({
+        where: { id: mockWorkspace.id },
+      });
     });
   });
 });

@@ -17,6 +17,19 @@ describe('Workspaces (e2e)', () => {
     await app.close();
   });
 
+  async function createWorkspace(token: string, overrides = {}) {
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/workspaces')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Marketing Team',
+        description: 'For marketing',
+        ...overrides,
+      });
+
+    return res.body.data.workspace;
+  }
+
   describe('POST /api/v1/workspaces', () => {
     it('returns 401 with no access token', async () => {
       const res = await request(app.getHttpServer())
@@ -44,10 +57,22 @@ describe('Workspaces (e2e)', () => {
       expect(res.status).toBe(201);
       expect(res.body.data.workspace).toEqual(
         expect.objectContaining({
+          id: expect.any(String),
           name: 'Marketing Team',
           description: 'For marketing',
+          ownerId: expect.any(String),
         }),
       );
+    });
+
+    it('defaults description to null when not provided', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/workspaces')
+        .set('Authorization', `Bearer ${user.accessToken}`)
+        .send({ name: 'No Description Team' });
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.workspace.description).toBeNull();
     });
   });
 
@@ -58,72 +83,139 @@ describe('Workspaces (e2e)', () => {
       expect(res.status).toBe(401);
     });
 
-    it('returns a list of workspaces with a valid access token', async () => {
+    it('returns only workspaces owned by the caller', async () => {
+      const owner = await signupTestUser(app);
+      const otherUser = await signupTestUser(app);
+      const ownedWorkspace = await createWorkspace(owner.accessToken);
+      await createWorkspace(otherUser.accessToken);
+
       const res = await request(app.getHttpServer())
         .get('/api/v1/workspaces')
-        .set('Authorization', `Bearer ${user.accessToken}`);
+        .set('Authorization', `Bearer ${owner.accessToken}`);
 
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body.data.workspaces)).toBe(true);
+      const ids = res.body.data.workspaces.map((w: { id: string }) => w.id);
+      expect(ids).toContain(ownedWorkspace.id);
     });
   });
 
   describe('GET /api/v1/workspaces/:workspaceId', () => {
     it('returns 401 with no access token', async () => {
       const res = await request(app.getHttpServer()).get(
-        '/api/v1/workspaces/workspace-123',
+        '/api/v1/workspaces/nonexistent-id',
       );
 
       expect(res.status).toBe(401);
     });
 
-    it('returns a workspace with a valid access token', async () => {
+    it('returns 404 for a workspace that does not exist', async () => {
       const res = await request(app.getHttpServer())
-        .get('/api/v1/workspaces/workspace-123')
+        .get('/api/v1/workspaces/nonexistent-id')
+        .set('Authorization', `Bearer ${user.accessToken}`);
+
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 404 when the workspace exists but is owned by someone else', async () => {
+      const owner = await signupTestUser(app);
+      const otherUser = await signupTestUser(app);
+      const workspace = await createWorkspace(owner.accessToken);
+
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/workspaces/${workspace.id}`)
+        .set('Authorization', `Bearer ${otherUser.accessToken}`);
+
+      expect(res.status).toBe(404);
+    });
+
+    it('returns the workspace when owned by the caller', async () => {
+      const workspace = await createWorkspace(user.accessToken);
+
+      const res = await request(app.getHttpServer())
+        .get(`/api/v1/workspaces/${workspace.id}`)
         .set('Authorization', `Bearer ${user.accessToken}`);
 
       expect(res.status).toBe(200);
-      expect(res.body.data.workspace.id).toBe('workspace-123');
+      expect(res.body.data.workspace.id).toBe(workspace.id);
     });
   });
 
   describe('PATCH /api/v1/workspaces/:workspaceId', () => {
     it('returns 400 when the body is empty', async () => {
+      const workspace = await createWorkspace(user.accessToken);
+
       const res = await request(app.getHttpServer())
-        .patch('/api/v1/workspaces/workspace-123')
+        .patch(`/api/v1/workspaces/${workspace.id}`)
         .set('Authorization', `Bearer ${user.accessToken}`)
         .send({});
 
       expect(res.status).toBe(400);
     });
 
-    it('updates the workspace with a valid access token', async () => {
+    it('returns 404 when the workspace exists but is owned by someone else', async () => {
+      const owner = await signupTestUser(app);
+      const otherUser = await signupTestUser(app);
+      const workspace = await createWorkspace(owner.accessToken);
+
       const res = await request(app.getHttpServer())
-        .patch('/api/v1/workspaces/workspace-123')
+        .patch(`/api/v1/workspaces/${workspace.id}`)
+        .set('Authorization', `Bearer ${otherUser.accessToken}`)
+        .send({ name: 'Hijacked Name' });
+
+      expect(res.status).toBe(404);
+    });
+
+    it('updates the workspace with a valid access token', async () => {
+      const workspace = await createWorkspace(user.accessToken);
+
+      const res = await request(app.getHttpServer())
+        .patch(`/api/v1/workspaces/${workspace.id}`)
         .set('Authorization', `Bearer ${user.accessToken}`)
         .send({ name: 'Renamed Workspace' });
 
       expect(res.status).toBe(200);
       expect(res.body.data.workspace.name).toBe('Renamed Workspace');
+      expect(res.body.data.workspace.description).toBe(workspace.description);
     });
   });
 
   describe('DELETE /api/v1/workspaces/:workspaceId', () => {
     it('returns 401 with no access token', async () => {
       const res = await request(app.getHttpServer()).delete(
-        '/api/v1/workspaces/workspace-123',
+        '/api/v1/workspaces/nonexistent-id',
       );
 
       expect(res.status).toBe(401);
     });
 
-    it('deletes the workspace with a valid access token', async () => {
+    it('returns 404 when the workspace exists but is owned by someone else', async () => {
+      const owner = await signupTestUser(app);
+      const otherUser = await signupTestUser(app);
+      const workspace = await createWorkspace(owner.accessToken);
+
       const res = await request(app.getHttpServer())
-        .delete('/api/v1/workspaces/workspace-123')
+        .delete(`/api/v1/workspaces/${workspace.id}`)
+        .set('Authorization', `Bearer ${otherUser.accessToken}`);
+
+      expect(res.status).toBe(404);
+    });
+
+    it('deletes the workspace with a valid access token, and it becomes unreachable after', async () => {
+      const workspace = await createWorkspace(user.accessToken);
+
+      const deleteRes = await request(app.getHttpServer())
+        .delete(`/api/v1/workspaces/${workspace.id}`)
         .set('Authorization', `Bearer ${user.accessToken}`);
 
-      expect(res.status).toBe(200);
-      expect(res.body.status).toBe('success');
+      expect(deleteRes.status).toBe(200);
+      expect(deleteRes.body.status).toBe('success');
+
+      const getRes = await request(app.getHttpServer())
+        .get(`/api/v1/workspaces/${workspace.id}`)
+        .set('Authorization', `Bearer ${user.accessToken}`);
+
+      expect(getRes.status).toBe(404);
     });
   });
 });
