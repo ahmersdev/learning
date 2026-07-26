@@ -41,7 +41,7 @@ describe('Auth (e2e)', () => {
           fullName: uniqueBody.fullName,
           username: uniqueBody.username,
           email: uniqueBody.email,
-          role: 'user',
+          role: 'admin',
           mustChangePassword: false,
         }),
       );

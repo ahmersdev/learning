@@ -7,10 +7,12 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
+import { UserRole } from '../../generated/prisma/enums';
 
 export interface AuthenticatedUser {
   id: string;
   email: string;
+  role: UserRole;
 }
 
 @Injectable()
@@ -35,14 +37,18 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     try {
-      const decoded = this.jwtService.verify<{ userId: string; email: string }>(
-        token,
-        { secret: this.configService.get<string>('JWT_ACCESS_SECRET') },
-      );
+      const decoded = this.jwtService.verify<{
+        userId: string;
+        email: string;
+        role: UserRole;
+      }>(token, {
+        secret: this.configService.get<string>('JWT_ACCESS_SECRET'),
+      });
 
       (request as Request & { user: AuthenticatedUser }).user = {
         id: decoded.userId,
         email: decoded.email,
+        role: decoded.role,
       };
 
       return true;

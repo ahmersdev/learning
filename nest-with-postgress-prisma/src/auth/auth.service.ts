@@ -9,7 +9,7 @@ import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '../generated/prisma/client';
-import type { User } from '../generated/prisma/client';
+import type { User, UserRole } from '../generated/prisma/client';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { toSafeUser } from '../common/utils/safe-user.util';
@@ -21,6 +21,7 @@ interface AccessTokenPayload {
   email: string;
   username: string;
   fullName: string;
+  role: UserRole;
 }
 
 interface RefreshTokenPayload {
@@ -81,7 +82,7 @@ export class AuthService {
    * so a refresh token is only ever valid while its session row exists.
    */
   private async issueTokens(
-    user: Pick<User, 'id' | 'email' | 'username' | 'fullName'>,
+    user: Pick<User, 'id' | 'email' | 'username' | 'fullName' | 'role'>,
   ) {
     const tokenId = randomUUID();
     const refreshExpiry = this.configService.get<string>(
@@ -101,6 +102,7 @@ export class AuthService {
       email: user.email,
       username: user.username,
       fullName: user.fullName,
+      role: user.role,
     });
     const refreshToken = await this.generateRefreshToken({
       userId: user.id,

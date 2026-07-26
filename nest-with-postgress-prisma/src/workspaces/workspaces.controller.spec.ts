@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { WorkspacesController } from './workspaces.controller';
 import { WorkspacesService } from './workspaces.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../common/guards/jwt-auth.guard';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
@@ -13,6 +14,16 @@ describe('WorkspacesController', () => {
   const mockUser: AuthenticatedUser = {
     id: 'user-123',
     email: 'john@example.com',
+    role: 'admin',
+  };
+
+  const mockWorkspace = {
+    id: 'w-1',
+    ownerId: mockUser.id,
+    name: 'Marketing Team',
+    description: null as string | null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
   };
 
   beforeEach(async () => {
@@ -33,6 +44,8 @@ describe('WorkspacesController', () => {
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: jest.fn().mockReturnValue(true) })
+      .overrideGuard(RolesGuard)
+      .useValue({ canActivate: jest.fn().mockReturnValue(true) })
       .compile();
 
     controller = module.get<WorkspacesController>(WorkspacesController);
@@ -50,12 +63,7 @@ describe('WorkspacesController', () => {
   describe('create', () => {
     it('calls service.create with userId and dto, returns wrapped response', async () => {
       const dto: CreateWorkspaceDto = { name: 'Marketing Team' };
-      const workspace = {
-        id: 'w-1',
-        ownerId: mockUser.id,
-        name: dto.name,
-        description: null,
-      };
+      const workspace = { ...mockWorkspace, name: dto.name };
       workspacesService.create.mockResolvedValue(workspace);
 
       const result = await controller.create(mockUser, dto);
@@ -71,9 +79,7 @@ describe('WorkspacesController', () => {
 
   describe('findAll', () => {
     it('calls service.findAll with userId, returns wrapped response', async () => {
-      const workspaces = [
-        { id: 'w-1', ownerId: mockUser.id, name: 'Stub', description: null },
-      ];
+      const workspaces = [mockWorkspace];
       workspacesService.findAll.mockResolvedValue(workspaces);
 
       const result = await controller.findAll(mockUser);
@@ -85,12 +91,7 @@ describe('WorkspacesController', () => {
 
   describe('findOne', () => {
     it('calls service.findOne with userId and workspaceId, returns wrapped response', async () => {
-      const workspace = {
-        id: 'w-1',
-        ownerId: mockUser.id,
-        name: 'Stub',
-        description: null,
-      };
+      const workspace = mockWorkspace;
       workspacesService.findOne.mockResolvedValue(workspace);
 
       const result = await controller.findOne(mockUser, 'w-1');
@@ -106,12 +107,7 @@ describe('WorkspacesController', () => {
   describe('update', () => {
     it('calls service.update with userId, workspaceId, and dto, returns wrapped response', async () => {
       const dto: UpdateWorkspaceDto = { name: 'Renamed' };
-      const workspace = {
-        id: 'w-1',
-        ownerId: mockUser.id,
-        name: 'Renamed',
-        description: null,
-      };
+      const workspace = { ...mockWorkspace, name: 'Renamed' };
       workspacesService.update.mockResolvedValue(workspace);
 
       const result = await controller.update(mockUser, 'w-1', dto);

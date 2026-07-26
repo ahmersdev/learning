@@ -191,6 +191,7 @@ describe('AuthService', () => {
           email: mockUpdatedUser.email,
           username: mockUpdatedUser.username,
           fullName: mockUpdatedUser.fullName,
+          role: mockUpdatedUser.role,
         },
         { secret: 'access-secret', expiresIn: '15m' },
       );
@@ -333,6 +334,7 @@ describe('AuthService', () => {
           email: mockUser.email,
           username: mockUser.username,
           fullName: mockUser.fullName,
+          role: mockUser.role,
         },
         { secret: 'access-secret', expiresIn: '15m' },
       );

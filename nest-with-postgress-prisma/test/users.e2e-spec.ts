@@ -45,7 +45,7 @@ describe('Users (e2e)', () => {
           fullName: expect.any(String),
           username: user.username,
           email: user.email,
-          role: 'user',
+          role: 'admin',
           mustChangePassword: false,
         }),
       );

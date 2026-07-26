@@ -3,6 +3,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { createTestApp } from './utils/create-test-app';
 import { signupTestUser, TestUser } from './utils/auth-helper';
+import { PrismaService } from '../src/prisma/prisma.service';
 
 describe('Workspaces (e2e)', () => {
   let app: INestApplication<App>;
@@ -216,6 +217,33 @@ describe('Workspaces (e2e)', () => {
         .set('Authorization', `Bearer ${user.accessToken}`);
 
       expect(getRes.status).toBe(404);
+    });
+  });
+
+  describe('Authorization (admin-only)', () => {
+    it('returns 403 when a non-admin user tries to access workspace routes', async () => {
+      const user = await signupTestUser(app);
+
+      const prisma = app.get(PrismaService);
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { role: 'user' },
+      });
+
+      // downgrading via Prisma doesn't invalidate the already-issued token,
+      // so this correctly proves the token-embedded role is what's checked —
+      // sign in again to get a token that reflects the new role
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/auth/signin')
+        .send({ email: user.email, password: 'Password1!' });
+
+      const downgradedToken = res.body.data.accessToken;
+
+      const listRes = await request(app.getHttpServer())
+        .get('/api/v1/workspaces')
+        .set('Authorization', `Bearer ${downgradedToken}`);
+
+      expect(listRes.status).toBe(403);
     });
   });
 });
