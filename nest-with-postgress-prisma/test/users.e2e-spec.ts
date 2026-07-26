@@ -3,6 +3,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { createTestApp } from './utils/create-test-app';
 import { signupTestUser, TestUser } from './utils/auth-helper';
+import { PrismaService } from '../src/prisma/prisma.service';
 
 describe('Users (e2e)', () => {
   let app: INestApplication<App>;
@@ -15,6 +16,52 @@ describe('Users (e2e)', () => {
 
   afterAll(async () => {
     await app.close();
+  });
+
+  describe('GET /api/v1/users', () => {
+    it('returns 401 with no access token', async () => {
+      const res = await request(app.getHttpServer()).get('/api/v1/users');
+
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 403 when the requester is not an admin', async () => {
+      const nonAdmin = await signupTestUser(app);
+
+      const prisma = app.get(PrismaService);
+      await prisma.user.update({
+        where: { id: nonAdmin.id },
+        data: { role: 'user' },
+      });
+
+      const signinRes = await request(app.getHttpServer())
+        .post('/api/v1/auth/signin')
+        .send({ email: nonAdmin.email, password: 'Password1!' });
+
+      const res = await request(app.getHttpServer())
+        .get('/api/v1/users')
+        .set('Authorization', `Bearer ${signinRes.body.data.accessToken}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it('returns the full user list, without passwords, for an admin', async () => {
+      const admin = await signupTestUser(app);
+
+      const res = await request(app.getHttpServer())
+        .get('/api/v1/users')
+        .set('Authorization', `Bearer ${admin.accessToken}`);
+
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body.data.users)).toBe(true);
+      const found = res.body.data.users.find(
+        (u: { id: string }) => u.id === admin.id,
+      );
+      expect(found).toEqual(
+        expect.objectContaining({ email: admin.email, role: 'admin' }),
+      );
+      expect(found).not.toHaveProperty('password');
+    });
   });
 
   describe('GET /api/v1/users/me', () => {

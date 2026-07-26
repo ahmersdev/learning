@@ -13,6 +13,14 @@ import { UpdateUserDto } from './dto/update-user.dto';
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
+  async findAllUsers() {
+    const users = await this.prisma.user.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return users.map(toSafeUser);
+  }
+
   async getUser(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },

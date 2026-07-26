@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import type { AuthenticatedUser } from '../common/guards/jwt-auth.guard';
 import { UpdateUserDto } from './dto/update-user.dto';
 
@@ -12,6 +13,7 @@ describe('UsersController', () => {
   const mockUser: AuthenticatedUser = {
     id: 'user-123',
     email: 'john@example.com',
+    role: 'admin',
   };
 
   const mockSafeUser = {
@@ -19,7 +21,7 @@ describe('UsersController', () => {
     fullName: 'John Doe',
     username: 'johndoe',
     email: mockUser.email,
-    role: 'user' as const,
+    role: 'admin' as const,
     mustChangePassword: false,
     lastLogin: new Date(),
     createdAt: new Date(),
@@ -35,11 +37,14 @@ describe('UsersController', () => {
           useValue: {
             getUser: jest.fn(),
             updateUser: jest.fn(),
+            findAllUsers: jest.fn(),
           },
         },
       ],
     })
       .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: jest.fn().mockReturnValue(true) })
+      .overrideGuard(RolesGuard)
       .useValue({ canActivate: jest.fn().mockReturnValue(true) })
       .compile();
 
@@ -53,6 +58,20 @@ describe('UsersController', () => {
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
+  });
+
+  describe('getAllUsers', () => {
+    it('returns the full user list wrapped in the standard response shape', async () => {
+      usersService.findAllUsers.mockResolvedValue([mockSafeUser]);
+
+      const result = await controller.getAllUsers();
+
+      expect(usersService.findAllUsers).toHaveBeenCalled();
+      expect(result).toEqual({
+        status: 'success',
+        data: { users: [mockSafeUser] },
+      });
+    });
   });
 
   describe('getUser', () => {

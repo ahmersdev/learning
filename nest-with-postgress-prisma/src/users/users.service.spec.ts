@@ -12,7 +12,9 @@ import { UpdateUserDto } from './dto/update-user.dto';
 
 describe('UsersService', () => {
   let service: UsersService;
-  let prisma: { user: { findUnique: jest.Mock; update: jest.Mock } };
+  let prisma: {
+    user: { findUnique: jest.Mock; findMany: jest.Mock; update: jest.Mock };
+  };
 
   const mockUser: User = {
     id: 'user-123',
@@ -31,6 +33,7 @@ describe('UsersService', () => {
     prisma = {
       user: {
         findUnique: jest.fn(),
+        findMany: jest.fn(),
         update: jest.fn(),
       },
     };
@@ -44,6 +47,28 @@ describe('UsersService', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+  });
+
+  describe('findAllUsers', () => {
+    it('returns all users without their password fields, ordered by newest first', async () => {
+      const secondUser: User = {
+        ...mockUser,
+        id: 'user-456',
+        email: 'jane@example.com',
+        username: 'janedoe',
+      };
+      prisma.user.findMany.mockResolvedValue([secondUser, mockUser]);
+
+      const result = await service.findAllUsers();
+
+      expect(prisma.user.findMany).toHaveBeenCalledWith({
+        orderBy: { createdAt: 'desc' },
+      });
+      expect(result).toHaveLength(2);
+      expect(result[0]).not.toHaveProperty('password');
+      expect(result[1]).not.toHaveProperty('password');
+      expect(result[0].email).toBe(secondUser.email);
+    });
   });
 
   describe('getUser', () => {
