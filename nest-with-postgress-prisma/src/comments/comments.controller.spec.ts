@@ -13,6 +13,7 @@ describe('CommentsController', () => {
   const mockUser: AuthenticatedUser = {
     id: 'user-123',
     email: 'john@example.com',
+    role: 'admin',
   };
   const taskId = 'task-123';
 
@@ -57,7 +58,8 @@ describe('CommentsController', () => {
         taskId,
         authorId: mockUser.id,
         content: dto.content,
-        createdAt: '2026-07-24T00:00:00.000Z',
+        createdAt: new Date(),
+        updatedAt: new Date(),
       };
 
       service.assertCanAccessTask.mockResolvedValue(undefined);
@@ -86,7 +88,8 @@ describe('CommentsController', () => {
           taskId,
           authorId: mockUser.id,
           content: 'Stub comment',
-          createdAt: '2026-07-24T00:00:00.000Z',
+          createdAt: new Date(),
+          updatedAt: new Date(),
         },
       ];
 
@@ -112,7 +115,8 @@ describe('CommentsController', () => {
         taskId,
         authorId: mockUser.id,
         content: 'Edited comment',
-        createdAt: '2026-07-24T00:00:00.000Z',
+        createdAt: new Date(),
+        updatedAt: new Date(),
       };
 
       service.assertCanAccessTask.mockResolvedValue(undefined);
