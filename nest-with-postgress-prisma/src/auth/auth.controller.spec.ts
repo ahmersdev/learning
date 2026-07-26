@@ -4,6 +4,8 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
 describe('AuthController', () => {
   let controller: AuthController;
@@ -40,10 +42,14 @@ describe('AuthController', () => {
             login: jest.fn(),
             refresh: jest.fn(),
             signout: jest.fn(),
+            changePassword: jest.fn(),
           },
         },
       ],
-    }).compile();
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: jest.fn().mockReturnValue(true) })
+      .compile();
 
     controller = module.get<AuthController>(AuthController);
     authService = module.get(AuthService);
@@ -185,6 +191,27 @@ describe('AuthController', () => {
 
       expect(authService.signout).toHaveBeenCalledWith(undefined);
       expect(res.clearCookie).toHaveBeenCalled();
+    });
+  });
+
+  describe('changePassword', () => {
+    it('calls authService.changePassword with the current user id and dto', async () => {
+      const dto: ChangePasswordDto = {
+        currentPassword: 'OldP@ss1',
+        newPassword: 'NewP@ss1',
+      };
+      authService.changePassword.mockResolvedValue(undefined);
+
+      const result = await controller.changePassword(mockSafeUser, dto);
+
+      expect(authService.changePassword).toHaveBeenCalledWith(
+        mockSafeUser.id,
+        dto,
+      );
+      expect(result).toEqual({
+        status: 'success',
+        message: 'Password changed successfully',
+      });
     });
   });
 });

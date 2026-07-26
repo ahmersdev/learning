@@ -1,6 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsEmail, IsIn } from 'class-validator';
+import {
+  IsEmail,
+  IsIn,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
 import { WORKSPACE_ROLES } from '../workspace-members-role';
 import type { WorkspaceRole } from '../workspace-members-role';
 
@@ -15,4 +21,11 @@ export class CreateWorkspaceMemberDto {
     message: `role must be one of: ${WORKSPACE_ROLES.join(', ')}`,
   })
   role!: WorkspaceRole;
+
+  @ApiProperty({ example: 'Jane Doe', required: false })
+  @IsOptional()
+  @IsString()
+  @Transform(({ value }) => value?.trim())
+  @MinLength(1, { message: 'fullName cannot be empty' })
+  fullName?: string;
 }

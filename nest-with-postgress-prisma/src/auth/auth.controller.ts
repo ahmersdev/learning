@@ -6,13 +6,24 @@ import {
   Res,
   HttpCode,
   HttpStatus,
+  Patch,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import type { Response, Request } from 'express';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import type { AuthenticatedUser } from '../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
@@ -115,5 +126,25 @@ export class AuthController {
     await this.authService.signout(token);
     res.clearCookie('refreshToken', REFRESH_COOKIE_OPTIONS);
     return { status: 'success', message: 'Logged out successfully' };
+  }
+
+  @Patch('change-password')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Change the current password' })
+  @ApiResponse({ status: 200, description: 'Password changed successfully' })
+  @ApiResponse({ status: 400, description: 'Validation failed' })
+  @ApiResponse({
+    status: 401,
+    description:
+      'Unauthorized — missing/invalid token or current password is incorrect',
+  })
+  async changePassword(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ChangePasswordDto,
+  ) {
+    await this.authService.changePassword(user.id, dto);
+    return { status: 'success', message: 'Password changed successfully' };
   }
 }

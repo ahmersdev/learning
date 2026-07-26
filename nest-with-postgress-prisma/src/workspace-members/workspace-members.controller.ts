@@ -52,7 +52,7 @@ export class WorkspaceMembersController {
       workspaceId,
       user.id,
     );
-    const member = await this.workspaceMembersService.create(
+    const { member, credentials } = await this.workspaceMembersService.create(
       requesterRole,
       workspaceId,
       dto,
@@ -61,7 +61,7 @@ export class WorkspaceMembersController {
     return {
       status: 'success',
       message: 'Member added successfully',
-      data: { member },
+      data: { member, credentials },
     };
   }
 

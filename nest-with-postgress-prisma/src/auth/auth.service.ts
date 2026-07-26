@@ -13,6 +13,7 @@ import type { User, UserRole } from '../generated/prisma/client';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { toSafeUser } from '../common/utils/safe-user.util';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 const SALT_ROUNDS = 10;
 
@@ -224,5 +225,28 @@ export class AuthService {
     } catch {
       // Invalid/expired token — nothing to revoke, nothing to do.
     }
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+
+    if (!user) {
+      throw new UnauthorizedException('User no longer exists');
+    }
+
+    const isMatch = await bcrypt.compare(dto.currentPassword, user.password);
+    if (!isMatch) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.newPassword, SALT_ROUNDS);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { password: hashedPassword, mustChangePassword: false },
+      }),
+      this.prisma.session.deleteMany({ where: { userId } }),
+    ]);
   }
 }

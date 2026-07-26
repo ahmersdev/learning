@@ -14,6 +14,7 @@ jest.mock('bcrypt', () => ({
   compare: jest.fn(),
 }));
 import * as bcrypt from 'bcrypt';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -371,6 +372,54 @@ describe('AuthService', () => {
 
       await expect(service.signout('bad.token')).resolves.toBeUndefined();
       expect(prisma.session.deleteMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('changePassword', () => {
+    const dto: ChangePasswordDto = {
+      currentPassword: 'OldP@ss1',
+      newPassword: 'NewP@ss1',
+    };
+
+    it('throws UnauthorizedException when the user no longer exists', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(service.changePassword('user-123', dto)).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('throws UnauthorizedException when currentPassword is incorrect', async () => {
+      prisma.user.findUnique.mockResolvedValue(mockUser);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+      await expect(service.changePassword(mockUser.id, dto)).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('updates the password, clears mustChangePassword, and revokes all sessions on success', async () => {
+      prisma.user.findUnique.mockResolvedValue(mockUser);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      (bcrypt.hash as jest.Mock).mockResolvedValue('new-hashed-password');
+      prisma.user.update.mockResolvedValue({
+        ...mockUser,
+        password: 'new-hashed-password',
+      });
+      prisma.session.deleteMany.mockResolvedValue({ count: 2 });
+      (prisma as any).$transaction = jest.fn((ops: unknown[]) =>
+        Promise.all(ops),
+      );
+
+      await service.changePassword(mockUser.id, dto);
+
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: mockUser.id },
+        data: { password: 'new-hashed-password', mustChangePassword: false },
+      });
+      expect(prisma.session.deleteMany).toHaveBeenCalledWith({
+        where: { userId: mockUser.id },
+      });
     });
   });
 });

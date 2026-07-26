@@ -4,11 +4,21 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '../generated/prisma/client';
+import type { User } from '../generated/prisma/client';
+import {
+  deriveUsernameFromEmail,
+  randomUsernameSuffix,
+  generateTemporaryPassword,
+} from '../common/utils/user-provisioning.util';
 import { CreateWorkspaceMemberDto } from './dto/create-workspace-member.dto';
 import { UpdateWorkspaceMemberDto } from './dto/update-workspace-member.dto';
 import type { WorkspaceRole } from './workspace-members-role';
+
+const SALT_ROUNDS = 10;
+const MAX_USERNAME_ATTEMPTS = 5;
 
 @Injectable()
 export class WorkspaceMembersService {
@@ -35,6 +45,45 @@ export class WorkspaceMembersService {
     }
   }
 
+  private async createUserWithUniqueUsername(
+    baseUsername: string,
+    data: { fullName: string; email: string; password: string },
+  ): Promise<User> {
+    let username = baseUsername;
+
+    for (let attempt = 0; attempt < MAX_USERNAME_ATTEMPTS; attempt++) {
+      try {
+        return await this.prisma.user.create({
+          data: {
+            ...data,
+            username,
+            role: 'user',
+            mustChangePassword: true,
+          },
+        });
+      } catch (error) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002'
+        ) {
+          const target = (error.meta?.target as string[] | undefined) ?? [];
+          if (target.includes('email')) {
+            throw new ConflictException(
+              'A user with this email was just created — please retry',
+            );
+          }
+          username = `${baseUsername}${randomUsernameSuffix()}`;
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    throw new ConflictException(
+      'Could not generate a unique username, please try again',
+    );
+  }
+
   async create(
     requesterRole: WorkspaceRole,
     workspaceId: string,
@@ -42,18 +91,33 @@ export class WorkspaceMembersService {
   ) {
     this.assertIsAdmin(requesterRole);
 
-    const targetUser = await this.prisma.user.findUnique({
+    let targetUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
 
+    let credentials: { username: string; temporaryPassword: string } | null =
+      null;
+
     if (!targetUser) {
-      throw new NotFoundException('No user found with this email');
+      const temporaryPassword = generateTemporaryPassword();
+      const hashedPassword = await bcrypt.hash(temporaryPassword, SALT_ROUNDS);
+      const baseUsername = deriveUsernameFromEmail(dto.email);
+
+      targetUser = await this.createUserWithUniqueUsername(baseUsername, {
+        fullName: dto.fullName ?? baseUsername,
+        email: dto.email,
+        password: hashedPassword,
+      });
+
+      credentials = { username: targetUser.username, temporaryPassword };
     }
 
     try {
-      return await this.prisma.workspaceMember.create({
+      const member = await this.prisma.workspaceMember.create({
         data: { workspaceId, userId: targetUser.id, role: dto.role },
       });
+
+      return { member, credentials };
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
