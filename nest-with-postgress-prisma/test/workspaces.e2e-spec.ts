@@ -230,20 +230,44 @@ describe('Workspaces (e2e)', () => {
         data: { role: 'user' },
       });
 
-      // downgrading via Prisma doesn't invalidate the already-issued token,
-      // so this correctly proves the token-embedded role is what's checked —
-      // sign in again to get a token that reflects the new role
-      const res = await request(app.getHttpServer())
+      // Downgrading via Prisma doesn't invalidate the already-issued token —
+      // role is embedded in the access token, so a fresh signin is required
+      // to actually pick up the new role. Reusing the original token here
+      // would incorrectly pass, since it still carries role: 'admin'.
+      const signinRes = await request(app.getHttpServer())
         .post('/api/v1/auth/signin')
         .send({ email: user.email, password: 'Password1!' });
 
-      const downgradedToken = res.body.data.accessToken;
+      const downgradedToken = signinRes.body.data.accessToken;
 
       const listRes = await request(app.getHttpServer())
         .get('/api/v1/workspaces')
         .set('Authorization', `Bearer ${downgradedToken}`);
 
       expect(listRes.status).toBe(403);
+    });
+
+    it('returns 403 on the create route as well, confirming the guard is class-level', async () => {
+      const user = await signupTestUser(app);
+
+      const prisma = app.get(PrismaService);
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { role: 'user' },
+      });
+
+      const signinRes = await request(app.getHttpServer())
+        .post('/api/v1/auth/signin')
+        .send({ email: user.email, password: 'Password1!' });
+
+      const downgradedToken = signinRes.body.data.accessToken;
+
+      const createRes = await request(app.getHttpServer())
+        .post('/api/v1/workspaces')
+        .set('Authorization', `Bearer ${downgradedToken}`)
+        .send({ name: 'Should Not Be Created' });
+
+      expect(createRes.status).toBe(403);
     });
   });
 });

@@ -227,4 +227,81 @@ describe('Auth (e2e)', () => {
       expect(res.status).toBe(200);
     });
   });
+
+  describe('PATCH /api/v1/auth/change-password', () => {
+    it('returns 401 with no access token', async () => {
+      const res = await request(app.getHttpServer())
+        .patch('/api/v1/auth/change-password')
+        .send({ currentPassword: 'Password1!', newPassword: 'NewPassword1!' });
+
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 400 when newPassword fails complexity rules', async () => {
+      const user = await signupTestUser(app);
+
+      const res = await request(app.getHttpServer())
+        .patch('/api/v1/auth/change-password')
+        .set('Authorization', `Bearer ${user.accessToken}`)
+        .send({ currentPassword: 'Password1!', newPassword: 'weak' });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 401 when currentPassword is incorrect', async () => {
+      const user = await signupTestUser(app);
+
+      const res = await request(app.getHttpServer())
+        .patch('/api/v1/auth/change-password')
+        .set('Authorization', `Bearer ${user.accessToken}`)
+        .send({
+          currentPassword: 'WrongPassword1!',
+          newPassword: 'NewPassword1!',
+        });
+
+      expect(res.status).toBe(401);
+    });
+
+    it('changes the password, clears mustChangePassword, and the old password stops working', async () => {
+      const user = await signupTestUser(app);
+
+      const changeRes = await request(app.getHttpServer())
+        .patch('/api/v1/auth/change-password')
+        .set('Authorization', `Bearer ${user.accessToken}`)
+        .send({ currentPassword: 'Password1!', newPassword: 'NewPassword1!' });
+
+      expect(changeRes.status).toBe(200);
+      expect(changeRes.body.status).toBe('success');
+
+      const oldPasswordSignin = await request(app.getHttpServer())
+        .post('/api/v1/auth/signin')
+        .send({ email: user.email, password: 'Password1!' });
+
+      expect(oldPasswordSignin.status).toBe(401);
+
+      const newPasswordSignin = await request(app.getHttpServer())
+        .post('/api/v1/auth/signin')
+        .send({ email: user.email, password: 'NewPassword1!' });
+
+      expect(newPasswordSignin.status).toBe(200);
+      expect(newPasswordSignin.body.data.user.mustChangePassword).toBe(false);
+    });
+
+    it('revokes all existing sessions, so the previous refresh token stops working', async () => {
+      const user = await signupTestUser(app);
+
+      const changeRes = await request(app.getHttpServer())
+        .patch('/api/v1/auth/change-password')
+        .set('Authorization', `Bearer ${user.accessToken}`)
+        .send({ currentPassword: 'Password1!', newPassword: 'NewPassword1!' });
+
+      expect(changeRes.status).toBe(200);
+
+      const refreshRes = await request(app.getHttpServer())
+        .post('/api/v1/auth/refresh')
+        .set('Cookie', user.refreshTokenCookie);
+
+      expect(refreshRes.status).toBe(401);
+    });
+  });
 });

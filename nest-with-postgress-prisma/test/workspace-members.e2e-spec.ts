@@ -74,18 +74,6 @@ describe('Workspace Members (e2e)', () => {
       expect(res.status).toBe(400);
     });
 
-    it('returns 404 when no user exists with the given email', async () => {
-      const owner = await signupTestUser(app);
-      const workspace = await createWorkspace(owner.accessToken);
-
-      const res = await request(app.getHttpServer())
-        .post(`/api/v1/workspaces/${workspace.id}/members`)
-        .set('Authorization', `Bearer ${owner.accessToken}`)
-        .send({ email: 'no-such-user@example.com', role: 'member' });
-
-      expect(res.status).toBe(404);
-    });
-
     it('returns 403 when the requester is a member, not an admin', async () => {
       const owner = await signupTestUser(app);
       const plainMember = await signupTestUser(app);
@@ -101,7 +89,7 @@ describe('Workspace Members (e2e)', () => {
       expect(res.status).toBe(403);
     });
 
-    it('adds a member with a valid admin access token', async () => {
+    it('adds an existing user as a member with a valid admin access token', async () => {
       const owner = await signupTestUser(app);
       const newMember = await signupTestUser(app);
       const workspace = await createWorkspace(owner.accessToken);
@@ -113,11 +101,89 @@ describe('Workspace Members (e2e)', () => {
 
       expect(res.status).toBe(201);
       expect(res.body.data.member).toEqual(
-        expect.objectContaining({
-          workspaceId: workspace.id,
-          role: 'member',
-        }),
+        expect.objectContaining({ workspaceId: workspace.id, role: 'member' }),
       );
+      expect(res.body.data.credentials).toBeNull();
+    });
+
+    it('invites a brand-new email, creates the account, and returns temporary credentials', async () => {
+      const owner = await signupTestUser(app);
+      const workspace = await createWorkspace(owner.accessToken);
+      const newEmail = `invitee-${Date.now()}@example.com`;
+
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/workspaces/${workspace.id}/members`)
+        .set('Authorization', `Bearer ${owner.accessToken}`)
+        .send({ email: newEmail, fullName: 'Invited Person', role: 'member' });
+
+      expect(res.status).toBe(201);
+      expect(res.body.data.member).toEqual(
+        expect.objectContaining({ workspaceId: workspace.id, role: 'member' }),
+      );
+      expect(res.body.data.credentials).toEqual({
+        username: expect.any(String),
+        temporaryPassword: expect.any(String),
+      });
+    });
+
+    it('lets the newly invited user sign in with the temporary credentials, flagged for a password change', async () => {
+      const owner = await signupTestUser(app);
+      const workspace = await createWorkspace(owner.accessToken);
+      const newEmail = `invitee-${Date.now()}@example.com`;
+
+      const inviteRes = await request(app.getHttpServer())
+        .post(`/api/v1/workspaces/${workspace.id}/members`)
+        .set('Authorization', `Bearer ${owner.accessToken}`)
+        .send({ email: newEmail, fullName: 'Invited Person', role: 'member' });
+
+      const { username, temporaryPassword } = inviteRes.body.data.credentials;
+
+      const signinRes = await request(app.getHttpServer())
+        .post('/api/v1/auth/signin')
+        .send({ username, password: temporaryPassword });
+
+      expect(signinRes.status).toBe(200);
+
+      const profileRes = await request(app.getHttpServer())
+        .get('/api/v1/users/me')
+        .set('Authorization', `Bearer ${signinRes.body.data.accessToken}`);
+
+      expect(profileRes.body.data.user.mustChangePassword).toBe(true);
+      expect(profileRes.body.data.user.username).toBe(username);
+      expect(profileRes.body.data.user.role).toBe('user');
+    });
+
+    it('derives a unique username when the sanitized local part collides with an existing one', async () => {
+      const owner = await signupTestUser(app);
+      const workspace = await createWorkspace(owner.accessToken);
+
+      const firstEmail = `collide.person-${Date.now()}@example.com`;
+      const firstRes = await request(app.getHttpServer())
+        .post(`/api/v1/workspaces/${workspace.id}/members`)
+        .set('Authorization', `Bearer ${owner.accessToken}`)
+        .send({ email: firstEmail, fullName: 'First Person', role: 'member' });
+
+      const firstUsername = firstRes.body.data.credentials.username;
+
+      // Same local part (dots/hyphens strip out to the same sanitized base),
+      // different domain — collides on derived username, not on email.
+      const secondEmail = firstEmail.replace(
+        '@example.com',
+        '@other-domain.com',
+      );
+      const secondRes = await request(app.getHttpServer())
+        .post(`/api/v1/workspaces/${workspace.id}/members`)
+        .set('Authorization', `Bearer ${owner.accessToken}`)
+        .send({
+          email: secondEmail,
+          fullName: 'Second Person',
+          role: 'member',
+        });
+
+      expect(secondRes.status).toBe(201);
+      const secondUsername = secondRes.body.data.credentials.username;
+      expect(secondUsername).not.toBe(firstUsername);
+      expect(secondUsername.startsWith(firstUsername)).toBe(true);
     });
 
     it('returns 409 when the user is already a member', async () => {
