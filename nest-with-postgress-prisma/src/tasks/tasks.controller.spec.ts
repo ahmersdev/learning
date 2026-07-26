@@ -14,7 +14,31 @@ describe('TasksController', () => {
   const mockUser: AuthenticatedUser = {
     id: 'user-123',
     email: 'john@example.com',
+    role: 'admin',
   };
+
+  const mockProject = {
+    id: 'project-456',
+    workspaceId: 'workspace-123',
+    name: 'Website Redesign',
+    description: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const mockTask = {
+    id: 'task-1',
+    projectId: 'project-456',
+    title: 'Design homepage mockup',
+    description: null,
+    status: 'backlog' as const,
+    priority: 'medium' as const,
+    dueDate: null,
+    assigneeId: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
   const projectId = 'project-123';
 
   beforeEach(async () => {
@@ -53,20 +77,9 @@ describe('TasksController', () => {
   describe('create', () => {
     it('checks project access, then creates the task', async () => {
       const dto: CreateTaskDto = { title: 'Design homepage mockup' };
-      const task = {
-        id: 't-1',
-        projectId,
-        title: dto.title,
-        description: null,
-        status: 'backlog' as const,
-        priority: 'medium' as const,
-        dueDate: null,
-        assigneeId: null,
-        createdAt: '2026-07-24T00:00:00.000Z',
-      };
 
-      service.assertCanAccessProject.mockResolvedValue(undefined);
-      service.create.mockResolvedValue(task);
+      service.assertCanAccessProject.mockResolvedValue(mockProject);
+      service.create.mockResolvedValue(mockTask);
 
       const result = await controller.create(projectId, mockUser, dto);
 
@@ -78,7 +91,7 @@ describe('TasksController', () => {
       expect(result).toEqual({
         status: 'success',
         message: 'Task created successfully',
-        data: { task },
+        data: { task: mockTask },
       });
     });
   });
@@ -87,23 +100,11 @@ describe('TasksController', () => {
     it('checks project access, then returns tasks and pagination', async () => {
       const query: TaskQueryDto = { sortOrder: 'asc', page: 1, limit: 20 };
       const serviceResult = {
-        tasks: [
-          {
-            id: 't-1',
-            projectId,
-            title: 'Stub Task',
-            description: null,
-            status: 'backlog' as const,
-            priority: 'medium' as const,
-            dueDate: null,
-            assigneeId: null,
-            createdAt: '2026-07-24T00:00:00.000Z',
-          },
-        ],
+        tasks: [mockTask],
         pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
       };
 
-      service.assertCanAccessProject.mockResolvedValue(undefined);
+      service.assertCanAccessProject.mockResolvedValue(mockProject);
       service.findAll.mockResolvedValue(serviceResult);
 
       const result = await controller.findAll(projectId, mockUser, query);
@@ -125,20 +126,8 @@ describe('TasksController', () => {
 
   describe('findOne', () => {
     it('checks project access, then returns the task', async () => {
-      const task = {
-        id: 't-1',
-        projectId,
-        title: 'Stub Task',
-        description: null,
-        status: 'backlog' as const,
-        priority: 'medium' as const,
-        dueDate: null,
-        assigneeId: null,
-        createdAt: '2026-07-24T00:00:00.000Z',
-      };
-
-      service.assertCanAccessProject.mockResolvedValue(undefined);
-      service.findOne.mockResolvedValue(task);
+      service.assertCanAccessProject.mockResolvedValue(mockProject);
+      service.findOne.mockResolvedValue(mockTask);
 
       const result = await controller.findOne(projectId, 't-1', mockUser);
 
@@ -147,27 +136,17 @@ describe('TasksController', () => {
         mockUser.id,
       );
       expect(service.findOne).toHaveBeenCalledWith(projectId, 't-1');
-      expect(result).toEqual({ status: 'success', data: { task } });
+      expect(result).toEqual({ status: 'success', data: { task: mockTask } });
     });
   });
 
   describe('update', () => {
     it('checks project access, then updates the task', async () => {
       const dto: UpdateTaskDto = { status: 'done' };
-      const task = {
-        id: 't-1',
-        projectId,
-        title: 'Stub Task',
-        description: null,
-        status: 'done' as const,
-        priority: 'medium' as const,
-        dueDate: null,
-        assigneeId: null,
-        createdAt: '2026-07-24T00:00:00.000Z',
-      };
+      const updatedTask = { ...mockTask, status: 'done' as const };
 
-      service.assertCanAccessProject.mockResolvedValue(undefined);
-      service.update.mockResolvedValue(task);
+      service.assertCanAccessProject.mockResolvedValue(mockProject);
+      service.update.mockResolvedValue(updatedTask);
 
       const result = await controller.update(projectId, 't-1', mockUser, dto);
 
@@ -179,14 +158,14 @@ describe('TasksController', () => {
       expect(result).toEqual({
         status: 'success',
         message: 'Task updated successfully',
-        data: { task },
+        data: { task: updatedTask },
       });
     });
   });
 
   describe('remove', () => {
     it('checks project access, then removes the task', async () => {
-      service.assertCanAccessProject.mockResolvedValue(undefined);
+      service.assertCanAccessProject.mockResolvedValue(mockProject);
       service.remove.mockResolvedValue(undefined);
 
       const result = await controller.remove(projectId, 't-1', mockUser);

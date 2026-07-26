@@ -40,9 +40,9 @@ export class UpdateTaskDto {
   @IsISO8601({}, { message: 'dueDate must be a valid ISO date' })
   dueDate?: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, nullable: true })
   @IsOptional()
   @IsString()
   @MinLength(1, { message: 'assigneeId cannot be empty' })
-  assigneeId?: string;
+  assigneeId?: string | null;
 }

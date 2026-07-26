@@ -12,9 +12,11 @@ model User {
   role               UserRole    @default(admin)
   mustChangePassword Boolean     @default(false)
   lastLogin          DateTime?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
   sessions           Session[]
   ownedWorkspaces    Workspace[]
   workspaceMemberships WorkspaceMember[]
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
+  assignedTasks Task[]
 }
