@@ -53,20 +53,29 @@ export class CommentsService {
     }
   }
 
-  async create(
-    taskId: string,
-    authorId: string,
-    dto: CreateCommentDto,
-  ): Promise<Comment> {
+  private readonly commentSelect = {
+    id: true,
+    taskId: true,
+    content: true,
+    createdAt: true,
+    updatedAt: true,
+    author: {
+      select: { id: true, fullName: true, username: true },
+    },
+  } as const;
+
+  async create(taskId: string, authorId: string, dto: CreateCommentDto) {
     return this.prisma.comment.create({
       data: { taskId, authorId, content: dto.content },
+      select: this.commentSelect,
     });
   }
 
-  async findAll(taskId: string): Promise<Comment[]> {
+  async findAll(taskId: string) {
     return this.prisma.comment.findMany({
       where: { taskId },
       orderBy: { createdAt: 'asc' },
+      select: this.commentSelect,
     });
   }
 

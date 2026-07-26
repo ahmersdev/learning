@@ -46,6 +46,15 @@ describe('CommentsService', () => {
     updatedAt: new Date(),
   };
 
+  const mockPublicComment = {
+    id: 'comment-1',
+    taskId,
+    content: 'Looks good, ready to ship.',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    author: { id: authorId, fullName: 'John Doe', username: 'johndoe' },
+  };
+
   const mockComment: Comment = {
     id: 'comment-1',
     taskId,
@@ -154,30 +163,47 @@ describe('CommentsService', () => {
   });
 
   describe('create', () => {
-    it('creates a comment with the given taskId, authorId, and content', async () => {
+    it('creates a comment with the given taskId, authorId, and content, selecting author details', async () => {
       const dto: CreateCommentDto = { content: 'Looks good, ready to ship.' };
-      prisma.comment.create.mockResolvedValue(mockComment);
+      prisma.comment.create.mockResolvedValue(mockPublicComment);
 
       const result = await service.create(taskId, authorId, dto);
 
       expect(prisma.comment.create).toHaveBeenCalledWith({
         data: { taskId, authorId, content: dto.content },
+        select: {
+          id: true,
+          taskId: true,
+          content: true,
+          createdAt: true,
+          updatedAt: true,
+          author: { select: { id: true, fullName: true, username: true } },
+        },
       });
-      expect(result).toEqual(mockComment);
+      expect(result).toEqual(mockPublicComment);
+      expect(result).not.toHaveProperty('authorId');
     });
   });
 
   describe('findAll', () => {
-    it('returns comments scoped to the given taskId, ordered oldest first', async () => {
-      prisma.comment.findMany.mockResolvedValue([mockComment]);
+    it('returns comments with author details, scoped to the given taskId, ordered oldest first', async () => {
+      prisma.comment.findMany.mockResolvedValue([mockPublicComment]);
 
       const result = await service.findAll(taskId);
 
       expect(prisma.comment.findMany).toHaveBeenCalledWith({
         where: { taskId },
         orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          taskId: true,
+          content: true,
+          createdAt: true,
+          updatedAt: true,
+          author: { select: { id: true, fullName: true, username: true } },
+        },
       });
-      expect(result).toEqual([mockComment]);
+      expect(result).toEqual([mockPublicComment]);
     });
   });
 

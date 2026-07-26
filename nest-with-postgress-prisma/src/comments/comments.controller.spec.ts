@@ -56,10 +56,10 @@ describe('CommentsController', () => {
       const comment = {
         id: 'c-1',
         taskId,
-        authorId: mockUser.id,
         content: dto.content,
         createdAt: new Date(),
         updatedAt: new Date(),
+        author: { id: mockUser.id, fullName: 'John Doe', username: 'johndoe' },
       };
 
       service.assertCanAccessTask.mockResolvedValue(undefined);
@@ -86,10 +86,14 @@ describe('CommentsController', () => {
         {
           id: 'c-1',
           taskId,
-          authorId: mockUser.id,
           content: 'Stub comment',
           createdAt: new Date(),
           updatedAt: new Date(),
+          author: {
+            id: mockUser.id,
+            fullName: 'John Doe',
+            username: 'johndoe',
+          },
         },
       ];
 

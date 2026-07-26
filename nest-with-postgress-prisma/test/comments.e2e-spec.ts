@@ -129,10 +129,11 @@ describe('Comments (e2e)', () => {
       expect(res.body.data.comment).toEqual(
         expect.objectContaining({
           taskId: task.id,
-          authorId: owner.id,
           content: 'Looks good, ready to ship.',
+          author: expect.objectContaining({ id: owner.id }),
         }),
       );
+      expect(res.body.data.comment).not.toHaveProperty('authorId');
     });
   });
 
@@ -238,7 +239,7 @@ describe('Comments (e2e)', () => {
         (c: { id: string }) => c.id === comment.id,
       );
       expect(preserved).toBeDefined();
-      expect(preserved.authorId).toBeNull();
+      expect(preserved.author).toBeNull();
       expect(preserved.content).toBe('Looks good, ready to ship.');
     });
   });
