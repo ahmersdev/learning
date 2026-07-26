@@ -1,6 +1,3 @@
--- AlterTable
-ALTER TABLE "User" ADD COLUMN     "lastLogin" TIMESTAMP(3);
-
 -- CreateTable
 CREATE TABLE "Session" (
     "id" TEXT NOT NULL,
