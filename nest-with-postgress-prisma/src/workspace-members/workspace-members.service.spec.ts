@@ -28,8 +28,10 @@ describe('WorkspaceMembersService', () => {
       update: jest.Mock;
       delete: jest.Mock;
     };
-    user: { findUnique: jest.Mock; create: jest.Mock };
+    user: { findUnique: jest.Mock; create: jest.Mock; update: jest.Mock };
     workspace: { findUnique: jest.Mock };
+    session: { deleteMany: jest.Mock };
+    $transaction: jest.Mock;
   };
 
   const workspaceId = 'workspace-123';
@@ -76,8 +78,10 @@ describe('WorkspaceMembersService', () => {
         update: jest.fn(),
         delete: jest.fn(),
       },
-      user: { findUnique: jest.fn(), create: jest.fn() },
+      user: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() },
       workspace: { findUnique: jest.fn() },
+      session: { deleteMany: jest.fn() },
+      $transaction: jest.fn((ops: unknown[]) => Promise.all(ops)),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -367,6 +371,104 @@ describe('WorkspaceMembersService', () => {
       expect(prisma.workspaceMember.delete).toHaveBeenCalledWith({
         where: { id: mockMembership.id },
       });
+    });
+  });
+
+  describe('resetPassword', () => {
+    const requesterId = 'admin-111';
+
+    const mockPendingUser: User = {
+      ...mockExistingUser,
+      id: targetUserId,
+      username: 'targetuser',
+      mustChangePassword: true,
+    };
+
+    const mockAlreadyChangedUser: User = {
+      ...mockExistingUser,
+      id: targetUserId,
+      mustChangePassword: false,
+    };
+
+    it('throws ForbiddenException when requester is not an admin', async () => {
+      await expect(
+        service.resetPassword('member', requesterId, workspaceId, targetUserId),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.workspace.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('throws ForbiddenException when the requester tries to reset their own password', async () => {
+      await expect(
+        service.resetPassword('admin', requesterId, workspaceId, requesterId),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.workspace.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('throws ForbiddenException when the target is the workspace owner', async () => {
+      prisma.workspace.findUnique.mockResolvedValue(mockWorkspace);
+
+      await expect(
+        service.resetPassword('admin', requesterId, workspaceId, ownerId),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.workspaceMember.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('throws NotFoundException when the target has no membership in this workspace', async () => {
+      prisma.workspace.findUnique.mockResolvedValue(mockWorkspace);
+      prisma.workspaceMember.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.resetPassword('admin', requesterId, workspaceId, targetUserId),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('throws ForbiddenException when the member has already set their own password', async () => {
+      prisma.workspace.findUnique.mockResolvedValue(mockWorkspace);
+      prisma.workspaceMember.findUnique.mockResolvedValue({
+        ...mockMembership,
+        user: mockAlreadyChangedUser,
+      });
+
+      await expect(
+        service.resetPassword('admin', requesterId, workspaceId, targetUserId),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('resets the password, revokes sessions, and returns credentials when eligible', async () => {
+      prisma.workspace.findUnique.mockResolvedValue(mockWorkspace);
+      prisma.workspaceMember.findUnique.mockResolvedValue({
+        ...mockMembership,
+        user: mockPendingUser,
+      });
+      (bcrypt.hash as jest.Mock).mockResolvedValue('new-hashed-password');
+      prisma.user.update.mockResolvedValue({
+        ...mockPendingUser,
+        password: 'new-hashed-password',
+      });
+      prisma.session.deleteMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.resetPassword(
+        'admin',
+        requesterId,
+        workspaceId,
+        targetUserId,
+      );
+
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: targetUserId },
+        data: { password: 'new-hashed-password' },
+      });
+      expect(prisma.session.deleteMany).toHaveBeenCalledWith({
+        where: { userId: targetUserId },
+      });
+      expect(result).toEqual({
+        username: mockPendingUser.username,
+        temporaryPassword: expect.any(String),
+      });
+      expect(result.temporaryPassword).toMatch(
+        /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z0-9]).{12}$/,
+      );
     });
   });
 });

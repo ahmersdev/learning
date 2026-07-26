@@ -39,6 +39,7 @@ describe('WorkspaceMembersController', () => {
             findAll: jest.fn(),
             update: jest.fn(),
             remove: jest.fn(),
+            resetPassword: jest.fn(),
           },
         },
       ],
@@ -201,6 +202,40 @@ describe('WorkspaceMembersController', () => {
       expect(result).toEqual({
         status: 'success',
         message: 'Member removed successfully',
+      });
+    });
+  });
+
+  describe('resetPassword', () => {
+    it('resolves the requester role, then resets the password and returns credentials', async () => {
+      const credentials = {
+        username: 'targetuser',
+        temporaryPassword: 'TempP@ss123X',
+      };
+
+      service.getRequesterRole.mockResolvedValue('admin');
+      service.resetPassword.mockResolvedValue(credentials);
+
+      const result = await controller.resetPassword(
+        workspaceId,
+        'user-456',
+        mockUser,
+      );
+
+      expect(service.getRequesterRole).toHaveBeenCalledWith(
+        workspaceId,
+        mockUser.id,
+      );
+      expect(service.resetPassword).toHaveBeenCalledWith(
+        'admin',
+        mockUser.id,
+        workspaceId,
+        'user-456',
+      );
+      expect(result).toEqual({
+        status: 'success',
+        message: 'Password reset successfully',
+        data: { credentials },
       });
     });
   });

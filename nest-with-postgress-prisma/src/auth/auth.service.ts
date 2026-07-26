@@ -14,8 +14,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { toSafeUser } from '../common/utils/safe-user.util';
 import { ChangePasswordDto } from './dto/change-password.dto';
-
-const SALT_ROUNDS = 10;
+import { SALT_ROUNDS } from '../common/constants';
 
 interface AccessTokenPayload {
   userId: string;

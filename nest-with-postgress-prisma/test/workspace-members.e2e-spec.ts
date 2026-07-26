@@ -379,4 +379,173 @@ describe('Workspace Members (e2e)', () => {
       expect(listRes.body.data.members.length).toBe(1);
     });
   });
+
+  describe('POST /api/v1/workspaces/:workspaceId/members/:userId/reset-password', () => {
+    async function inviteNewMember(ownerToken: string, workspaceId: string) {
+      const email = `invitee-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2)}@example.com`;
+
+      const res = await request(app.getHttpServer())
+        .post(`/api/v1/workspaces/${workspaceId}/members`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ email, fullName: 'Invited Person', role: 'member' });
+
+      return {
+        userId: res.body.data.member.userId,
+        ...res.body.data.credentials,
+      };
+    }
+
+    it('returns 401 with no access token', async () => {
+      const owner = await signupTestUser(app);
+      const workspace = await createWorkspace(owner.accessToken);
+
+      const res = await request(app.getHttpServer()).post(
+        `/api/v1/workspaces/${workspace.id}/members/some-user-id/reset-password`,
+      );
+
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 403 when the requester is not an admin', async () => {
+      const owner = await signupTestUser(app);
+      const plainMember = await signupTestUser(app);
+      const workspace = await createWorkspace(owner.accessToken);
+      await addMember(owner.accessToken, workspace.id, plainMember, 'member');
+      const invited = await inviteNewMember(owner.accessToken, workspace.id);
+
+      const res = await request(app.getHttpServer())
+        .post(
+          `/api/v1/workspaces/${workspace.id}/members/${invited.userId}/reset-password`,
+        )
+        .set('Authorization', `Bearer ${plainMember.accessToken}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it('returns 403 when the admin tries to reset their own password', async () => {
+      const owner = await signupTestUser(app);
+      const workspace = await createWorkspace(owner.accessToken);
+
+      const res = await request(app.getHttpServer())
+        .post(
+          `/api/v1/workspaces/${workspace.id}/members/${workspace.ownerId}/reset-password`,
+        )
+        .set('Authorization', `Bearer ${owner.accessToken}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it('returns 403 when trying to reset the workspace owner’s password', async () => {
+      const owner = await signupTestUser(app);
+      const otherAdmin = await signupTestUser(app);
+      const workspace = await createWorkspace(owner.accessToken);
+      await addMember(owner.accessToken, workspace.id, otherAdmin, 'admin');
+
+      const res = await request(app.getHttpServer())
+        .post(
+          `/api/v1/workspaces/${workspace.id}/members/${workspace.ownerId}/reset-password`,
+        )
+        .set('Authorization', `Bearer ${otherAdmin.accessToken}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it('returns 404 when the target is not a member of this workspace', async () => {
+      const owner = await signupTestUser(app);
+      const outsider = await signupTestUser(app);
+      const workspace = await createWorkspace(owner.accessToken);
+
+      const res = await request(app.getHttpServer())
+        .post(
+          `/api/v1/workspaces/${workspace.id}/members/${outsider.id}/reset-password`,
+        )
+        .set('Authorization', `Bearer ${owner.accessToken}`);
+
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 403 when the member has already set their own password', async () => {
+      const owner = await signupTestUser(app);
+      const workspace = await createWorkspace(owner.accessToken);
+      const invited = await inviteNewMember(owner.accessToken, workspace.id);
+
+      const signinRes = await request(app.getHttpServer())
+        .post('/api/v1/auth/signin')
+        .send({
+          username: invited.username,
+          password: invited.temporaryPassword,
+        });
+
+      await request(app.getHttpServer())
+        .patch('/api/v1/auth/change-password')
+        .set('Authorization', `Bearer ${signinRes.body.data.accessToken}`)
+        .send({
+          currentPassword: invited.temporaryPassword,
+          newPassword: 'MyOwnNewP@ss1',
+        });
+
+      const res = await request(app.getHttpServer())
+        .post(
+          `/api/v1/workspaces/${workspace.id}/members/${invited.userId}/reset-password`,
+        )
+        .set('Authorization', `Bearer ${owner.accessToken}`);
+
+      expect(res.status).toBe(403);
+    });
+
+    it('resets the password, returns new credentials, revokes the old session, and lets the member sign in again', async () => {
+      const owner = await signupTestUser(app);
+      const workspace = await createWorkspace(owner.accessToken);
+      const invited = await inviteNewMember(owner.accessToken, workspace.id);
+
+      const initialSignin = await request(app.getHttpServer())
+        .post('/api/v1/auth/signin')
+        .send({
+          username: invited.username,
+          password: invited.temporaryPassword,
+        });
+
+      expect(initialSignin.status).toBe(200);
+      const initialRefreshCookie = initialSignin.headers['set-cookie'][0];
+
+      const resetRes = await request(app.getHttpServer())
+        .post(
+          `/api/v1/workspaces/${workspace.id}/members/${invited.userId}/reset-password`,
+        )
+        .set('Authorization', `Bearer ${owner.accessToken}`);
+
+      expect(resetRes.status).toBe(200);
+      expect(resetRes.body.data.credentials).toEqual({
+        username: invited.username,
+        temporaryPassword: expect.any(String),
+      });
+      expect(resetRes.body.data.credentials.temporaryPassword).not.toBe(
+        invited.temporaryPassword,
+      );
+
+      const oldSessionRefresh = await request(app.getHttpServer())
+        .post('/api/v1/auth/refresh')
+        .set('Cookie', initialRefreshCookie);
+      expect(oldSessionRefresh.status).toBe(401);
+
+      const oldPasswordSignin = await request(app.getHttpServer())
+        .post('/api/v1/auth/signin')
+        .send({
+          username: invited.username,
+          password: invited.temporaryPassword,
+        });
+      expect(oldPasswordSignin.status).toBe(401);
+
+      const newPasswordSignin = await request(app.getHttpServer())
+        .post('/api/v1/auth/signin')
+        .send({
+          username: invited.username,
+          password: resetRes.body.data.credentials.temporaryPassword,
+        });
+      expect(newPasswordSignin.status).toBe(200);
+      expect(newPasswordSignin.body.data.user.mustChangePassword).toBe(true);
+    });
+  });
 });

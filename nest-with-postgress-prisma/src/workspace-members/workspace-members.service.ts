@@ -16,9 +16,7 @@ import {
 import { CreateWorkspaceMemberDto } from './dto/create-workspace-member.dto';
 import { UpdateWorkspaceMemberDto } from './dto/update-workspace-member.dto';
 import type { WorkspaceRole } from './workspace-members-role';
-
-const SALT_ROUNDS = 10;
-const MAX_USERNAME_ATTEMPTS = 5;
+import { MAX_USERNAME_ATTEMPTS, SALT_ROUNDS } from '../common/constants';
 
 @Injectable()
 export class WorkspaceMembersService {
@@ -191,5 +189,58 @@ export class WorkspaceMembersService {
     }
 
     await this.prisma.workspaceMember.delete({ where: { id: membership.id } });
+  }
+
+  async resetPassword(
+    requesterRole: WorkspaceRole,
+    requesterId: string,
+    workspaceId: string,
+    targetUserId: string,
+  ) {
+    this.assertIsAdmin(requesterRole);
+
+    if (targetUserId === requesterId) {
+      throw new ForbiddenException(
+        'You cannot reset your own password this way — use PATCH /auth/change-password instead',
+      );
+    }
+
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+    });
+
+    if (workspace?.ownerId === targetUserId) {
+      throw new ForbiddenException(
+        "The workspace owner's password cannot be reset this way",
+      );
+    }
+
+    const membership = await this.prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: targetUserId } },
+      include: { user: true },
+    });
+
+    if (!membership) {
+      throw new NotFoundException('Member not found');
+    }
+
+    if (!membership.user.mustChangePassword) {
+      throw new ForbiddenException(
+        'This member has already set their own password and cannot be reset this way',
+      );
+    }
+
+    const temporaryPassword = generateTemporaryPassword();
+    const hashedPassword = await bcrypt.hash(temporaryPassword, SALT_ROUNDS);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: targetUserId },
+        data: { password: hashedPassword },
+      }),
+      this.prisma.session.deleteMany({ where: { userId: targetUserId } }),
+    ]);
+
+    return { username: membership.user.username, temporaryPassword };
   }
 }

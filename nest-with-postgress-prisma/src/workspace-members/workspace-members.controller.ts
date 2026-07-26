@@ -149,4 +149,40 @@ export class WorkspaceMembersController {
 
     return { status: 'success', message: 'Member removed successfully' };
   }
+
+  @Post(':userId/reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Reset a member's temporary password (admin only)" })
+  @ApiParam({ name: 'workspaceId' })
+  @ApiParam({ name: 'userId' })
+  @ApiResponse({ status: 200, description: 'Password reset successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    description:
+      'Forbidden — requester is not a workspace admin, target is the owner, target is the requester themself, or the member already set their own password',
+  })
+  @ApiResponse({ status: 404, description: 'Member not found' })
+  async resetPassword(
+    @Param('workspaceId') workspaceId: string,
+    @Param('userId') userId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const requesterRole = await this.workspaceMembersService.getRequesterRole(
+      workspaceId,
+      user.id,
+    );
+    const credentials = await this.workspaceMembersService.resetPassword(
+      requesterRole,
+      user.id,
+      workspaceId,
+      userId,
+    );
+
+    return {
+      status: 'success',
+      message: 'Password reset successfully',
+      data: { credentials },
+    };
+  }
 }
