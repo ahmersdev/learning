@@ -4,6 +4,7 @@ import { App } from 'supertest/types';
 import { createTestApp } from './utils/create-test-app';
 import { signupTestUser, TestUser } from './utils/auth-helper';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { randomUUID } from 'crypto';
 
 describe('Workspaces (e2e)', () => {
   let app: INestApplication<App>;
@@ -104,7 +105,7 @@ describe('Workspaces (e2e)', () => {
   describe('GET /api/v1/workspaces/:workspaceId', () => {
     it('returns 401 with no access token', async () => {
       const res = await request(app.getHttpServer()).get(
-        '/api/v1/workspaces/nonexistent-id',
+        `/api/v1/workspaces/${randomUUID()}`,
       );
 
       expect(res.status).toBe(401);
@@ -112,7 +113,7 @@ describe('Workspaces (e2e)', () => {
 
     it('returns 404 for a workspace that does not exist', async () => {
       const res = await request(app.getHttpServer())
-        .get('/api/v1/workspaces/nonexistent-id')
+        .get(`/api/v1/workspaces/${randomUUID()}`)
         .set('Authorization', `Bearer ${user.accessToken}`);
 
       expect(res.status).toBe(404);
@@ -184,7 +185,7 @@ describe('Workspaces (e2e)', () => {
   describe('DELETE /api/v1/workspaces/:workspaceId', () => {
     it('returns 401 with no access token', async () => {
       const res = await request(app.getHttpServer()).delete(
-        '/api/v1/workspaces/nonexistent-id',
+        `/api/v1/workspaces/${randomUUID()}`,
       );
 
       expect(res.status).toBe(401);

@@ -23,6 +23,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { CommentsService } from './comments.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
+import { ParseUuidParamPipe } from '../common/pipes/parse-uuid-param.pipe';
 
 @ApiTags('Comments')
 @ApiBearerAuth('access-token')
@@ -39,7 +40,7 @@ export class CommentsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Task not found' })
   async create(
-    @Param('taskId') taskId: string,
+    @Param('taskId', ParseUuidParamPipe) taskId: string,
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateCommentDto,
   ) {
@@ -63,7 +64,7 @@ export class CommentsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Task not found' })
   async findAll(
-    @Param('taskId') taskId: string,
+    @Param('taskId', ParseUuidParamPipe) taskId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     await this.commentsService.assertCanAccessTask(taskId, user.id);
@@ -85,8 +86,8 @@ export class CommentsController {
   })
   @ApiResponse({ status: 404, description: 'Comment not found' })
   async update(
-    @Param('taskId') taskId: string,
-    @Param('commentId') commentId: string,
+    @Param('taskId', ParseUuidParamPipe) taskId: string,
+    @Param('commentId', ParseUuidParamPipe) commentId: string,
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: UpdateCommentDto,
   ) {
@@ -115,8 +116,8 @@ export class CommentsController {
   })
   @ApiResponse({ status: 404, description: 'Comment not found' })
   async remove(
-    @Param('taskId') taskId: string,
-    @Param('commentId') commentId: string,
+    @Param('taskId', ParseUuidParamPipe) taskId: string,
+    @Param('commentId', ParseUuidParamPipe) commentId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     await this.commentsService.assertCanAccessTask(taskId, user.id);

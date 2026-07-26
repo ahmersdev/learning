@@ -25,6 +25,7 @@ import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { TaskQueryDto } from './dto/task-query.dto';
+import { ParseUuidParamPipe } from '../common/pipes/parse-uuid-param.pipe';
 
 @ApiTags('Tasks')
 @ApiBearerAuth('access-token')
@@ -41,7 +42,7 @@ export class TasksController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Project not found' })
   async create(
-    @Param('projectId') projectId: string,
+    @Param('projectId', ParseUuidParamPipe) projectId: string,
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateTaskDto,
   ) {
@@ -68,7 +69,7 @@ export class TasksController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Project not found' })
   async findAll(
-    @Param('projectId') projectId: string,
+    @Param('projectId', ParseUuidParamPipe) projectId: string,
     @CurrentUser() user: AuthenticatedUser,
     @Query() query: TaskQueryDto,
   ) {
@@ -89,8 +90,8 @@ export class TasksController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Task not found' })
   async findOne(
-    @Param('projectId') projectId: string,
-    @Param('taskId') taskId: string,
+    @Param('projectId', ParseUuidParamPipe) projectId: string,
+    @Param('taskId', ParseUuidParamPipe) taskId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     await this.tasksService.assertCanAccessProject(projectId, user.id);
@@ -108,8 +109,8 @@ export class TasksController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Task not found' })
   async update(
-    @Param('projectId') projectId: string,
-    @Param('taskId') taskId: string,
+    @Param('projectId', ParseUuidParamPipe) projectId: string,
+    @Param('taskId', ParseUuidParamPipe) taskId: string,
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: UpdateTaskDto,
   ) {
@@ -132,8 +133,8 @@ export class TasksController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Task not found' })
   async remove(
-    @Param('projectId') projectId: string,
-    @Param('taskId') taskId: string,
+    @Param('projectId', ParseUuidParamPipe) projectId: string,
+    @Param('taskId', ParseUuidParamPipe) taskId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     await this.tasksService.assertCanAccessProject(projectId, user.id);

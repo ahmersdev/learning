@@ -23,6 +23,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { ProjectsService } from './projects.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
+import { ParseUuidParamPipe } from '../common/pipes/parse-uuid-param.pipe';
 
 @ApiTags('Projects')
 @ApiBearerAuth('access-token')
@@ -39,7 +40,7 @@ export class ProjectsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Workspace not found' })
   async create(
-    @Param('workspaceId') workspaceId: string,
+    @Param('workspaceId', ParseUuidParamPipe) workspaceId: string,
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateProjectDto,
   ) {
@@ -63,7 +64,7 @@ export class ProjectsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Workspace not found' })
   async findAll(
-    @Param('workspaceId') workspaceId: string,
+    @Param('workspaceId', ParseUuidParamPipe) workspaceId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     await this.projectsService.assertIsWorkspaceMember(workspaceId, user.id);
@@ -80,8 +81,8 @@ export class ProjectsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Project not found' })
   async findOne(
-    @Param('workspaceId') workspaceId: string,
-    @Param('projectId') projectId: string,
+    @Param('workspaceId', ParseUuidParamPipe) workspaceId: string,
+    @Param('projectId', ParseUuidParamPipe) projectId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     await this.projectsService.assertIsWorkspaceMember(workspaceId, user.id);
@@ -99,8 +100,8 @@ export class ProjectsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Project not found' })
   async update(
-    @Param('workspaceId') workspaceId: string,
-    @Param('projectId') projectId: string,
+    @Param('workspaceId', ParseUuidParamPipe) workspaceId: string,
+    @Param('projectId', ParseUuidParamPipe) projectId: string,
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: UpdateProjectDto,
   ) {
@@ -127,8 +128,8 @@ export class ProjectsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Project not found' })
   async remove(
-    @Param('workspaceId') workspaceId: string,
-    @Param('projectId') projectId: string,
+    @Param('workspaceId', ParseUuidParamPipe) workspaceId: string,
+    @Param('projectId', ParseUuidParamPipe) projectId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     await this.projectsService.assertIsWorkspaceMember(workspaceId, user.id);

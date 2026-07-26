@@ -23,6 +23,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { WorkspaceMembersService } from './workspace-members.service';
 import { CreateWorkspaceMemberDto } from './dto/create-workspace-member.dto';
 import { UpdateWorkspaceMemberDto } from './dto/update-workspace-member.dto';
+import { ParseUuidParamPipe } from '../common/pipes/parse-uuid-param.pipe';
 
 @ApiTags('Workspace Members')
 @ApiBearerAuth('access-token')
@@ -44,7 +45,7 @@ export class WorkspaceMembersController {
     description: 'Forbidden — requester is not a workspace admin',
   })
   async create(
-    @Param('workspaceId') workspaceId: string,
+    @Param('workspaceId', ParseUuidParamPipe) workspaceId: string,
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreateWorkspaceMemberDto,
   ) {
@@ -74,7 +75,7 @@ export class WorkspaceMembersController {
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async findAll(
-    @Param('workspaceId') workspaceId: string,
+    @Param('workspaceId', ParseUuidParamPipe) workspaceId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     // Any member can view the list — just confirm they belong to the
@@ -98,8 +99,8 @@ export class WorkspaceMembersController {
     description: 'Forbidden — requester is not a workspace admin',
   })
   async update(
-    @Param('workspaceId') workspaceId: string,
-    @Param('userId') userId: string,
+    @Param('workspaceId', ParseUuidParamPipe) workspaceId: string,
+    @Param('userId', ParseUuidParamPipe) userId: string,
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: UpdateWorkspaceMemberDto,
   ) {
@@ -133,8 +134,8 @@ export class WorkspaceMembersController {
     description: 'Forbidden — requester is not a workspace admin',
   })
   async remove(
-    @Param('workspaceId') workspaceId: string,
-    @Param('userId') userId: string,
+    @Param('workspaceId', ParseUuidParamPipe) workspaceId: string,
+    @Param('userId', ParseUuidParamPipe) userId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     const requesterRole = await this.workspaceMembersService.getRequesterRole(
@@ -164,8 +165,8 @@ export class WorkspaceMembersController {
   })
   @ApiResponse({ status: 404, description: 'Member not found' })
   async resetPassword(
-    @Param('workspaceId') workspaceId: string,
-    @Param('userId') userId: string,
+    @Param('workspaceId', ParseUuidParamPipe) workspaceId: string,
+    @Param('userId', ParseUuidParamPipe) userId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     const requesterRole = await this.workspaceMembersService.getRequesterRole(

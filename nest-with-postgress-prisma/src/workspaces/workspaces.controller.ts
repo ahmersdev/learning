@@ -25,6 +25,7 @@ import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { ParseUuidParamPipe } from '../common/pipes/parse-uuid-param.pipe';
 
 @ApiTags('Workspaces')
 @ApiBearerAuth('access-token')
@@ -100,7 +101,7 @@ export class WorkspacesController {
   @ApiResponse({ status: 404, description: 'Workspace not found' })
   async findOne(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('workspaceId') workspaceId: string,
+    @Param('workspaceId', ParseUuidParamPipe) workspaceId: string,
   ) {
     const workspace = await this.workspacesService.findOne(
       user.id,
@@ -131,7 +132,7 @@ export class WorkspacesController {
   @ApiResponse({ status: 404, description: 'Workspace not found' })
   async update(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('workspaceId') workspaceId: string,
+    @Param('workspaceId', ParseUuidParamPipe) workspaceId: string,
     @Body() dto: UpdateWorkspaceDto,
   ) {
     const workspace = await this.workspacesService.update(
@@ -166,7 +167,7 @@ export class WorkspacesController {
   @ApiResponse({ status: 404, description: 'Workspace not found' })
   async remove(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('workspaceId') workspaceId: string,
+    @Param('workspaceId', ParseUuidParamPipe) workspaceId: string,
   ) {
     await this.workspacesService.remove(user.id, workspaceId);
 

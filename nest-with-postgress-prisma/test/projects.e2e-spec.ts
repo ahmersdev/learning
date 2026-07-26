@@ -2,7 +2,8 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { createTestApp } from './utils/create-test-app';
-import { signupTestUser, TestUser } from './utils/auth-helper';
+import { signupTestUser } from './utils/auth-helper';
+import { randomUUID } from 'crypto';
 
 describe('Projects (e2e)', () => {
   let app: INestApplication<App>;
@@ -152,7 +153,7 @@ describe('Projects (e2e)', () => {
       const { owner, workspace } = await setupWorkspaceWithOwner();
 
       const res = await request(app.getHttpServer())
-        .get(`/api/v1/workspaces/${workspace.id}/projects/nonexistent-id`)
+        .get(`/api/v1/workspaces/${workspace.id}/projects/${randomUUID()}`)
         .set('Authorization', `Bearer ${owner.accessToken}`);
 
       expect(res.status).toBe(404);
@@ -188,7 +189,7 @@ describe('Projects (e2e)', () => {
       const { owner, workspace } = await setupWorkspaceWithOwner();
 
       const res = await request(app.getHttpServer())
-        .patch(`/api/v1/workspaces/${workspace.id}/projects/nonexistent-id`)
+        .patch(`/api/v1/workspaces/${workspace.id}/projects/${randomUUID()}`)
         .set('Authorization', `Bearer ${owner.accessToken}`)
         .send({ name: 'Renamed' });
 
@@ -225,7 +226,7 @@ describe('Projects (e2e)', () => {
       const { owner, workspace } = await setupWorkspaceWithOwner();
 
       const res = await request(app.getHttpServer())
-        .delete(`/api/v1/workspaces/${workspace.id}/projects/nonexistent-id`)
+        .delete(`/api/v1/workspaces/${workspace.id}/projects/${randomUUID()}`)
         .set('Authorization', `Bearer ${owner.accessToken}`);
 
       expect(res.status).toBe(404);
